@@ -1,0 +1,19 @@
+{
+  "name": "gricc-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Global Risk Intelligence Command Center",
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"yellow.bold,cyan.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "powershell -Command \"if (Test-Path backend/.venv) { .\\backend\\.venv\\Scripts\\python -m uvicorn app.main:app --app-dir backend --reload --port 8000 } else { python -m uvicorn app.main:app --app-dir backend --reload --port 8000 }\"",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "powershell -Command \"if (Test-Path backend/.venv) { .\\backend\\.venv\\Scripts\\pytest backend/app/tests } else { python -m pytest backend/app/tests }\"",
+    "test:frontend": "npm run test --prefix frontend",
+    "lint": "npm run lint --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
