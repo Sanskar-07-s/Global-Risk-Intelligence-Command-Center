@@ -4,10 +4,9 @@ import {
   Plus, 
   Download, 
   Trash2, 
-  Tag, 
+  Bookmark, 
   Clock, 
-  FileCheck,
-  CheckCircle2
+  Tag 
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { CaseInvestigation, NormalizedEvent } from '../../types';
@@ -71,59 +70,59 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ events }) => {
 
   const handleExportJson = (c: CaseInvestigation) => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(c, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `GRICC_CASE_${c.id}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    const a = document.createElement('a');
+    a.setAttribute("href", dataStr);
+    a.setAttribute("download", `GRICC_CASE_${c.id}.json`);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] p-6 overflow-hidden flex gap-6 select-none">
-      {/* Left Case List Panel */}
-      <div className="w-80 lg:w-96 h-full glass-panel rounded-xl flex flex-col border-slate-800">
-        <div className="p-4 border-b border-cyber-cyan/20 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-xs font-mono font-bold text-cyber-cyan uppercase">
-            <FolderArchive className="w-4 h-4" />
+    <div className="w-full h-full p-8 pt-24 pl-24 overflow-hidden flex gap-6 select-none bg-space">
+      {/* Left Case Index Panel */}
+      <div className="w-80 lg:w-96 h-full command-surface rounded-2xl flex flex-col">
+        <div className="p-4 border-b border-surface-border flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-xs font-mono font-semibold text-content-primary">
+            <FolderArchive className="w-4 h-4 text-signal-cyan" />
             <span>INVESTIGATION BINDERS</span>
           </div>
           <button
             onClick={() => setIsCreating(true)}
-            className="p-1.5 rounded-lg bg-cyber-cyan/15 hover:bg-cyber-cyan/25 border border-cyber-cyan/40 text-cyber-cyan transition-colors"
-            title="Create New Investigation Case"
+            className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-elevated text-content-primary transition-colors"
+            title="Create New Case Binder"
           >
             <Plus className="w-4 h-4" />
           </button>
         </div>
 
         {/* Case List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
           {cases.map((c) => {
             const isSelected = selectedCase?.id === c.id;
             return (
               <div
                 key={c.id}
                 onClick={() => setSelectedCase(c)}
-                className={`p-3 rounded-lg cursor-pointer transition-all ${
+                className={`p-3 rounded-xl cursor-pointer transition-all ${
                   isSelected
-                    ? 'bg-cyber-cyan/15 border border-cyber-cyan/50 shadow-glow-cyan/20'
-                    : 'bg-obsidian-900/60 hover:bg-obsidian-900 border border-slate-800'
+                    ? 'command-surface-active shadow-cyan-glow'
+                    : 'hover:bg-surface-subtle'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-semibold text-white line-clamp-1">
+                  <span className="text-xs font-medium text-content-primary line-clamp-1">
                     {c.title}
                   </span>
-                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border uppercase ${
-                    c.priority === 'critical' ? 'bg-cyber-red/20 text-cyber-red border-cyber-red/50' : 'bg-cyber-amber/20 text-cyber-amber border-cyber-amber/50'
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase font-semibold ${
+                    c.priority === 'critical' ? 'bg-signal-red/20 text-signal-red' : 'bg-signal-amber/20 text-signal-amber'
                   }`}>
                     {c.priority}
                   </span>
                 </div>
-                <div className="text-[11px] font-mono text-slate-400 mt-2 flex items-center justify-between">
-                  <span>ID: {c.id}</span>
-                  <span className="text-cyber-cyan uppercase">{c.status}</span>
+                <div className="text-[11px] font-mono text-content-muted mt-2 flex items-center justify-between">
+                  <span>{c.id}</span>
+                  <span className="text-signal-cyan uppercase">{c.status}</span>
                 </div>
               </div>
             );
@@ -131,39 +130,39 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ events }) => {
         </div>
       </div>
 
-      {/* Right Case Detail & Report View */}
-      <div className="flex-1 h-full glass-panel-glow rounded-xl p-6 border-cyber-cyan/20 overflow-y-auto space-y-6">
+      {/* Right Reading & Investigation Surface */}
+      <div className="flex-1 h-full command-surface p-6 rounded-2xl overflow-y-auto space-y-6">
         {isCreating ? (
           <div className="max-w-xl space-y-4 text-xs font-mono">
-            <div className="text-sm font-bold text-cyber-cyan uppercase">
-              NEW CASE INVESTIGATION DOSSIER
-            </div>
+            <h2 className="text-sm font-semibold text-content-primary uppercase">
+              NEW CASE DOSSIER
+            </h2>
             <div>
-              <label className="text-slate-400 block mb-1">CASE TITLE:</label>
+              <label className="text-content-muted block mb-1">CASE TITLE</label>
               <input
                 type="text"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="e.g. Critical Strait Bottleneck Incident"
-                className="w-full bg-obsidian-900 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-cyber-cyan"
+                placeholder="e.g. Critical Logistics Chokepoint Disruption"
+                className="w-full bg-space border border-surface-border rounded-lg px-3 py-2 text-content-primary focus:outline-none focus:border-surface-border-active"
               />
             </div>
             <div>
-              <label className="text-slate-400 block mb-1">EXECUTIVE SUMMARY / SCOPE:</label>
+              <label className="text-content-muted block mb-1">EXECUTIVE SUMMARY / SCOPE</label>
               <textarea
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 rows={4}
-                placeholder="Scope of multi-domain risk inquiry..."
-                className="w-full bg-obsidian-900 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-cyber-cyan"
+                placeholder="Scope of investigation..."
+                className="w-full bg-space border border-surface-border rounded-lg px-3 py-2 text-content-primary focus:outline-none focus:border-surface-border-active font-sans"
               />
             </div>
             <div>
-              <label className="text-slate-400 block mb-1">PRIORITY TIER:</label>
+              <label className="text-content-muted block mb-1">PRIORITY TIER</label>
               <select
                 value={newPriority}
                 onChange={(e) => setNewPriority(e.target.value as any)}
-                className="w-full bg-obsidian-900 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-cyber-cyan"
+                className="w-full bg-space border border-surface-border rounded-lg px-3 py-2 text-content-primary focus:outline-none focus:border-surface-border-active"
               >
                 <option value="critical">Critical</option>
                 <option value="high">High</option>
@@ -171,47 +170,47 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ events }) => {
                 <option value="low">Low</option>
               </select>
             </div>
-            <div className="flex space-x-3 pt-2">
+            <div className="flex space-x-2 pt-2">
               <button
                 onClick={handleCreateCase}
-                className="px-4 py-2 rounded-lg bg-cyber-cyan text-obsidian-950 font-bold"
+                className="px-4 py-2 rounded-lg bg-signal-cyan/20 hover:bg-signal-cyan/30 text-signal-cyan font-semibold border border-signal-cyan/40"
               >
-                SAVE CASE
+                Save Binder
               </button>
               <button
                 onClick={() => setIsCreating(false)}
-                className="px-4 py-2 rounded-lg bg-obsidian-900 text-slate-400"
+                className="px-4 py-2 rounded-lg text-content-muted hover:text-content-primary"
               >
-                CANCEL
+                Cancel
               </button>
             </div>
           </div>
         ) : selectedCase ? (
           <div className="space-y-6">
-            <div className="flex items-start justify-between border-b border-cyber-cyan/20 pb-4">
+            <div className="flex items-start justify-between border-b border-surface-border pb-4">
               <div>
-                <div className="text-[10px] font-mono text-cyber-cyan tracking-widest uppercase">
+                <div className="text-[10px] font-mono text-signal-cyan uppercase tracking-wider">
                   CASE DOSSIER // {selectedCase.id}
                 </div>
-                <h1 className="text-xl font-bold text-white mt-1">
+                <h1 className="text-lg font-semibold text-content-primary mt-1">
                   {selectedCase.title}
                 </h1>
-                <div className="text-xs font-mono text-slate-400 mt-1">
-                  Status: <strong className="text-cyber-green uppercase">{selectedCase.status}</strong> // Priority: <strong className="text-cyber-amber uppercase">{selectedCase.priority}</strong>
+                <div className="text-xs font-mono text-content-muted mt-1">
+                  STATUS: <strong className="text-signal-green uppercase">{selectedCase.status}</strong> // PRIORITY: <strong className="text-signal-amber uppercase">{selectedCase.priority}</strong>
                 </div>
               </div>
 
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => handleExportJson(selectedCase)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-obsidian-900 hover:bg-obsidian-850 border border-slate-700 text-xs font-mono text-slate-300 hover:text-cyber-cyan transition-colors"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-surface-subtle hover:bg-surface-elevated text-xs font-mono text-content-secondary hover:text-content-primary border border-surface-border transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>EXPORT DOSSIER (JSON)</span>
+                  <span>Export JSON</span>
                 </button>
                 <button
                   onClick={() => handleDeleteCase(selectedCase.id)}
-                  className="p-1.5 rounded-lg bg-obsidian-900 hover:bg-cyber-red/20 border border-slate-700 text-slate-400 hover:text-cyber-red transition-colors"
+                  className="p-1.5 rounded-lg text-content-muted hover:text-signal-red hover:bg-signal-red/10 transition-colors"
                   title="Archive Case"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -219,48 +218,48 @@ export const CaseManagement: React.FC<CaseManagementProps> = ({ events }) => {
               </div>
             </div>
 
-            {/* Description */}
-            <div className="p-4 rounded-xl bg-obsidian-900/60 border border-slate-800 space-y-2">
-              <div className="text-xs font-mono text-slate-400 uppercase">
-                INVESTIGATION SCOPE & OBJECTIVE:
+            {/* Scope */}
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-mono text-content-muted uppercase">
+                INVESTIGATION SCOPE
               </div>
-              <p className="text-sm font-sans text-slate-200 leading-relaxed">
+              <p className="text-xs font-sans text-content-secondary leading-relaxed bg-space p-3 rounded-xl border border-surface-border">
                 {selectedCase.description || 'No formal briefing statement documented.'}
               </p>
             </div>
 
-            {/* Analyst Operational Notes */}
-            <div className="p-4 rounded-xl bg-obsidian-900/60 border border-slate-800 space-y-2">
-              <div className="text-xs font-mono text-cyber-cyan uppercase">
-                ANALYST LOG & REASONING MEMO:
+            {/* Analyst Notes */}
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-mono text-signal-cyan uppercase">
+                ANALYST LOG & OBSERVATIONS
               </div>
-              <p className="text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
-                {selectedCase.analyst_notes || 'All current evidence cross-referenced against active USGS, NASA, and CISA feeds. Surveillance continuous.'}
+              <p className="text-xs font-mono text-content-secondary leading-relaxed bg-space p-3 rounded-xl border border-surface-border">
+                {selectedCase.analyst_notes || 'Continuous correlation active across multi-domain sensors.'}
               </p>
             </div>
 
-            {/* Pinned Events Telemetry */}
-            <div className="space-y-3">
-              <div className="text-xs font-mono text-slate-400 uppercase">
-                PINNED SENSOR TELEMETRY NODES ({selectedCase.pinned_event_ids?.length || 0})
+            {/* Pinned Nodes */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-mono text-content-muted uppercase">
+                PINNED SENSOR INCIDENT NODES ({selectedCase.pinned_event_ids?.length || 0})
               </div>
               {selectedCase.pinned_event_ids && selectedCase.pinned_event_ids.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {selectedCase.pinned_event_ids.map((id, i) => (
-                    <div key={i} className="p-3 rounded-lg bg-obsidian-900 border border-slate-800 text-xs font-mono text-cyber-cyan">
+                    <div key={i} className="p-2.5 rounded-lg bg-space border border-surface-border text-xs font-mono text-signal-cyan">
                       Event Node: {id}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-4 rounded-lg bg-obsidian-900/30 border border-dashed border-slate-800 text-xs font-mono text-slate-500 text-center">
-                  No incident nodes pinned to this dossier yet. Select an incident in Global Operations and click "Pin to Case".
+                <div className="p-4 rounded-xl bg-space border border-dashed border-surface-border text-xs font-mono text-content-muted text-center">
+                  No incident nodes pinned to this dossier. Select an incident in Operations Command and click "Pin to Investigation Binder".
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center text-xs font-mono text-slate-500">
+          <div className="h-full flex items-center justify-center text-xs font-mono text-content-muted">
             Select an investigation case binder on the left.
           </div>
         )}

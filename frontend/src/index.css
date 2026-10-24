@@ -4,75 +4,94 @@
 
 @layer base {
   body {
-    @apply bg-obsidian-950 text-slate-100 font-sans select-none;
+    @apply bg-space text-content-primary font-sans antialiased overflow-hidden select-none;
+    background-color: #05070B;
   }
 }
 
-/* Glassmorphism tactical panels */
-.glass-panel {
-  background: rgba(7, 13, 29, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 240, 255, 0.15);
-}
-
-.glass-panel-subtle {
-  background: rgba(12, 20, 43, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+/* Minimalist Refined Floating Surfaces */
+.command-surface {
+  background: rgba(11, 16, 24, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.glass-panel-glow {
-  background: rgba(7, 13, 29, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  box-shadow: 0 0 25px rgba(0, 240, 255, 0.15);
+.command-surface-elevated {
+  background: rgba(17, 25, 37, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.7);
 }
 
-/* Tactical grid overlay */
-.tactical-grid {
-  background-image: linear-gradient(to right, rgba(0, 240, 255, 0.05) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
-  background-size: 32px 32px;
+.command-surface-active {
+  background: rgba(17, 25, 37, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(114, 221, 251, 0.4);
+  box-shadow: 0 0 32px -8px rgba(114, 221, 251, 0.25);
 }
 
-/* Custom scrollbars */
+/* Subtle Hairline Dividers */
+.hairline-b {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.hairline-t {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.hairline-r {
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+.hairline-l {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Custom Minimalist Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(3, 7, 18, 0.6);
+  background: rgba(5, 7, 11, 0.5);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.3);
-  border-radius: 3px;
+  background: rgba(141, 154, 170, 0.2);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 240, 255, 0.6);
+  background: rgba(114, 221, 251, 0.4);
 }
 
-/* Pulse animation for high-severity markers */
-@keyframes pulse-ring {
+/* Atmospheric Pulse Keyframes (Subtle) */
+@keyframes spatial-ping {
   0% {
     transform: scale(0.95);
-    opacity: 0.8;
+    opacity: 0.9;
   }
   50% {
-    transform: scale(1.15);
-    opacity: 0.3;
+    transform: scale(1.18);
+    opacity: 0.25;
   }
   100% {
     transform: scale(0.95);
-    opacity: 0.8;
+    opacity: 0.9;
   }
 }
 
-.animate-pulse-ring {
-  animation: pulse-ring 2.5s infinite ease-in-out;
+.animate-spatial-ping {
+  animation: spatial-ping 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

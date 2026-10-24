@@ -14,13 +14,11 @@ import { NormalizedEvent, RiskOverview } from './types';
 
 export const App: React.FC = () => {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>('operations');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [events, setEvents] = useState<NormalizedEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<NormalizedEvent | null>(null);
   const [riskOverview, setRiskOverview] = useState<RiskOverview | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch initial telemetry
   const refreshTelemetry = async () => {
     setIsRefreshing(true);
     try {
@@ -30,9 +28,6 @@ export const App: React.FC = () => {
       ]);
       setEvents(evList);
       setRiskOverview(rOverview);
-      if (evList.length > 0 && !selectedEvent) {
-        setSelectedEvent(evList[0]);
-      }
     } catch (err) {
       console.warn("Telemetry refresh error:", err);
     } finally {
@@ -42,21 +37,40 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     refreshTelemetry();
-    const interval = setInterval(refreshTelemetry, 30000); // 30s background sync
+    const interval = setInterval(refreshTelemetry, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Keyboard shortcut for AI Search (Cmd+K / Ctrl+K)
+  // Keyboard shortcut for Command Search (Cmd+K / Ctrl+K)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setActiveWorkspace('ai-desk');
+        const inputEl = document.querySelector('input[type="text"]') as HTMLInputElement;
+        if (inputEl) inputEl.focus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  const handleExecuteCommand = (query: string) => {
+    // If query matches a specific domain or region, filter or navigate
+    const qLower = query.toLowerCase();
+    const matchingEv = events.find(e => 
+      e.title.toLowerCase().includes(qLower) || 
+      e.region?.toLowerCase().includes(qLower) || 
+      e.domain.toLowerCase().includes(qLower)
+    );
+
+    if (matchingEv) {
+      setSelectedEvent(matchingEv);
+      setActiveWorkspace('operations');
+    } else {
+      // Direct query to AI Intelligence Desk
+      setActiveWorkspace('ai-desk');
+    }
+  };
 
   const handlePinEventToCase = async (ev: NormalizedEvent) => {
     try {
@@ -73,81 +87,85 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleLaunchScenario = (ev: NormalizedEvent) => {
+    setActiveWorkspace('scenarios');
+  };
+
   return (
-    <div className="flex flex-col h-screen w-screen bg-obsidian-950 text-slate-100 overflow-hidden font-sans">
-      {/* Top Operations Command Header */}
+    <div className="relative h-screen w-screen bg-space text-content-primary overflow-hidden font-sans select-none">
+      {/* 1. Floating Natural Language Command Prompt Header */}
       <Header
         riskOverview={riskOverview}
         onRefresh={refreshTelemetry}
         isRefreshing={isRefreshing}
-        onOpenSearch={() => setActiveWorkspace('ai-desk')}
+        onExecuteCommand={handleExecuteCommand}
       />
 
-      {/* Main Workspace Frame */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Navigation Sidebar */}
-        <Sidebar
-          activeWorkspace={activeWorkspace}
-          onSelectWorkspace={(ws) => setActiveWorkspace(ws)}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
+      {/* 2. Floating Minimalist Navigation Dock */}
+      <Sidebar
+        activeWorkspace={activeWorkspace}
+        onSelectWorkspace={(ws) => setActiveWorkspace(ws)}
+      />
 
-        {/* Dynamic Workspace Container */}
-        <main className="flex-1 h-full overflow-hidden relative">
-          {activeWorkspace === 'operations' && (
-            <OperationsCenter
-              events={events}
-              selectedEvent={selectedEvent}
-              onSelectEvent={(ev) => setSelectedEvent(ev)}
-              onPinEventToCase={handlePinEventToCase}
-            />
-          )}
+      {/* 3. Primary Full-Viewport Spatial Workspace Container */}
+      <main className="w-full h-full relative overflow-hidden">
+        {activeWorkspace === 'operations' && (
+          <OperationsCenter
+            events={events}
+            selectedEvent={selectedEvent}
+            onSelectEvent={(ev) => setSelectedEvent(ev)}
+            onPinEventToCase={handlePinEventToCase}
+            onLaunchScenario={handleLaunchScenario}
+            onAskAI={(q) => {
+              handleExecuteCommand(q);
+              setActiveWorkspace('ai-desk');
+            }}
+          />
+        )}
 
-          {activeWorkspace === 'threats' && (
-            <ThreatIntelligence
-              events={events}
-              onSelectEvent={(ev) => {
-                setSelectedEvent(ev);
-                setActiveWorkspace('operations');
-              }}
-            />
-          )}
+        {activeWorkspace === 'threats' && (
+          <ThreatIntelligence
+            events={events}
+            onSelectEvent={(ev) => {
+              setSelectedEvent(ev);
+              setActiveWorkspace('operations');
+            }}
+          />
+        )}
 
-          {activeWorkspace === 'knowledge-graph' && (
-            <KnowledgeGraph
-              events={events}
-              onSelectEvent={(ev) => {
-                setSelectedEvent(ev);
-                setActiveWorkspace('operations');
-              }}
-            />
-          )}
+        {activeWorkspace === 'knowledge-graph' && (
+          <KnowledgeGraph
+            events={events}
+            onSelectEvent={(ev) => {
+              setSelectedEvent(ev);
+              setActiveWorkspace('operations');
+            }}
+          />
+        )}
 
-          {activeWorkspace === 'analytics' && (
-            <RiskAnalytics
-              events={events}
-              riskOverview={riskOverview}
-            />
-          )}
+        {activeWorkspace === 'analytics' && (
+          <RiskAnalytics
+            events={events}
+            riskOverview={riskOverview}
+          />
+        )}
 
-          {activeWorkspace === 'scenarios' && (
-            <ScenarioLaboratory />
-          )}
+        {activeWorkspace === 'scenarios' && (
+          <ScenarioLaboratory />
+        )}
 
-          {activeWorkspace === 'ai-desk' && (
-            <AIDesk />
-          )}
+        {activeWorkspace === 'ai-desk' && (
+          <AIDesk />
+        )}
 
-          {activeWorkspace === 'data-health' && (
-            <DataHealth />
-          )}
+        {activeWorkspace === 'data-health' && (
+          <DataHealth />
+        )}
 
-          {activeWorkspace === 'cases' && (
-            <CaseManagement events={events} />
-          )}
-        </main>
-      </div>
+        {activeWorkspace === 'cases' && (
+          <CaseManagement events={events} />
+        )}
+      </main>
     </div>
   );
 };

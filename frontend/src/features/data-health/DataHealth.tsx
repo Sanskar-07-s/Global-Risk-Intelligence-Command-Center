@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Server, 
   RefreshCw, 
+  Activity, 
   CheckCircle2, 
-  AlertTriangle, 
-  Clock, 
-  Activity,
-  Database
+  AlertTriangle 
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { SourceHealth } from '../../types';
@@ -51,30 +49,25 @@ export const DataHealth: React.FC = () => {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] p-6 overflow-y-auto space-y-6 select-none">
-      {/* Top Banner */}
-      <div className="p-4 rounded-xl glass-panel-glow border-cyber-cyan/30 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 rounded-lg bg-cyber-cyan/15 border border-cyber-cyan/40 text-cyber-cyan">
-            <Server className="w-6 h-6 animate-pulse" />
+    <div className="w-full h-full p-8 pt-24 pl-24 overflow-y-auto space-y-6 select-none bg-space">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="text-[11px] font-mono text-signal-green uppercase tracking-wider">
+            DATA FUSION TELEMETRY // SENSOR REGISTRY
           </div>
-          <div>
-            <div className="text-xs font-mono text-cyber-cyan uppercase tracking-wider">
-              DATA FUSION & SYSTEM HEALTH // REGISTRY TELEMETRY
-            </div>
-            <h1 className="text-lg font-bold text-white">
-              Multi-Source Ingestion Pipeline Telemetry & Connectors
-            </h1>
-          </div>
+          <h1 className="text-xl font-semibold text-content-primary mt-1">
+            Real-Time Ingestion Connectors & Sensor Latency
+          </h1>
         </div>
 
         <button
           onClick={handleRefreshAll}
           disabled={isRefreshingAll}
-          className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-cyber-cyan hover:bg-cyber-cyan/80 text-obsidian-950 font-bold text-xs font-mono tracking-wider transition-all disabled:opacity-50"
+          className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-signal-cyan/20 hover:bg-signal-cyan/30 text-signal-cyan font-medium text-xs border border-signal-cyan/40 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingAll ? 'animate-spin' : ''}`} />
-          <span>{isRefreshingAll ? 'SYNCING ALL SENSORS...' : 'REFRESH ALL SOURCES'}</span>
+          <span>{isRefreshingAll ? 'Polling All Sensors...' : 'Refresh All Sources'}</span>
         </button>
       </div>
 
@@ -87,63 +80,63 @@ export const DataHealth: React.FC = () => {
           return (
             <div
               key={src.source_name}
-              className="p-5 rounded-xl glass-panel border-slate-800 space-y-4 flex flex-col justify-between"
+              className="command-surface p-5 rounded-2xl flex flex-col justify-between space-y-4"
             >
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${isOperational ? 'bg-cyber-green animate-pulse' : 'bg-cyber-red'}`} />
-                    <span className="text-xs font-mono font-bold text-white uppercase">
+                    <span className={`w-2 h-2 rounded-full ${isOperational ? 'bg-signal-green' : 'bg-signal-red'}`} />
+                    <span className="text-xs font-mono font-semibold text-content-primary uppercase">
                       {src.source_name}
                     </span>
                   </div>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
-                    isOperational ? 'bg-cyber-green/15 text-cyber-green border-cyber-green/30' : 'bg-cyber-red/15 text-cyber-red border-cyber-red/30'
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-semibold ${
+                    isOperational ? 'bg-signal-green/20 text-signal-green' : 'bg-signal-red/20 text-signal-red'
                   }`}>
                     {src.status}
                   </span>
                 </div>
 
-                <div className="text-sm font-semibold text-slate-200 mt-2 font-sans">
+                <h3 className="text-sm font-semibold text-content-primary mt-2">
                   {src.display_name}
-                </div>
+                </h3>
 
-                <div className="mt-3 space-y-1.5 text-xs font-mono text-slate-400">
+                <div className="mt-3 space-y-1.5 text-xs font-mono text-content-secondary">
                   <div className="flex justify-between">
-                    <span>Domain:</span>
-                    <span className="text-cyber-cyan uppercase">{src.domain}</span>
+                    <span className="text-content-muted">Domain:</span>
+                    <span className="text-content-primary uppercase">{src.domain}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Events Ingested:</span>
-                    <span className="text-slate-100 font-bold">{src.total_events_ingested}</span>
+                    <span className="text-content-muted">Events Ingested:</span>
+                    <span className="text-content-primary font-bold">{src.total_events_ingested}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Polling Latency:</span>
-                    <span className="text-slate-100">{src.latency_ms} ms</span>
+                    <span className="text-content-muted">Round-trip Latency:</span>
+                    <span className="text-content-primary">{src.latency_ms} ms</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Last Checked:</span>
-                    <span className="text-slate-400">
+                    <span className="text-content-muted">Last Checked:</span>
+                    <span className="text-content-muted">
                       {src.last_checked ? new Date(src.last_checked).toLocaleTimeString() : 'Pending'}
                     </span>
                   </div>
                 </div>
 
                 {src.error_message && (
-                  <div className="mt-3 p-2 rounded bg-cyber-red/10 border border-cyber-red/30 text-[11px] font-mono text-cyber-red line-clamp-2">
+                  <div className="mt-3 p-2.5 rounded-lg bg-signal-red/10 border border-signal-red/30 text-[11px] font-mono text-signal-red line-clamp-2">
                     {src.error_message}
                   </div>
                 )}
               </div>
 
-              <div className="pt-3 border-t border-slate-800">
+              <div className="pt-2 border-t border-surface-border">
                 <button
                   onClick={() => handleRefreshSingle(src.source_name)}
                   disabled={isSingleRefreshing}
-                  className="w-full flex items-center justify-center space-x-2 py-1.5 rounded-lg bg-obsidian-900 hover:bg-obsidian-850 border border-slate-700 text-xs font-mono text-slate-300 hover:text-cyber-cyan transition-colors"
+                  className="w-full flex items-center justify-center space-x-2 py-1.5 rounded-lg bg-space hover:bg-surface-subtle text-xs font-mono text-content-secondary hover:text-content-primary border border-surface-border transition-colors"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSingleRefreshing ? 'animate-spin text-cyber-cyan' : ''}`} />
-                  <span>{isSingleRefreshing ? 'POLLING API...' : 'TEST & REFRESH'}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSingleRefreshing ? 'animate-spin text-signal-cyan' : ''}`} />
+                  <span>{isSingleRefreshing ? 'Polling Connector...' : 'Test & Ingest'}</span>
                 </button>
               </div>
             </div>

@@ -7,30 +7,40 @@ export default {
   theme: {
     extend: {
       colors: {
-        obsidian: {
-          950: '#030712',
-          900: '#070d1d',
-          850: '#0c142b',
-          800: '#111d3d',
-          700: '#1b2a54',
+        space: {
+          DEFAULT: '#05070B',
+          950: '#030508',
+          900: '#070A10',
+          850: '#0B1018',
         },
-        cyber: {
-          cyan: '#00f0ff',
-          ice: '#70d6ff',
-          amber: '#ffb703',
-          red: '#ff0054',
-          green: '#06d6a0',
+        surface: {
+          DEFAULT: '#0B1018',
+          elevated: '#111925',
+          subtle: '#162030',
+          border: 'rgba(255, 255, 255, 0.08)',
+          'border-active': 'rgba(114, 221, 251, 0.35)',
+        },
+        signal: {
+          cyan: '#72DDFB',
+          amber: '#FFBD69',
+          red: '#FF626B',
+          green: '#80D7A2',
+          ice: '#A5C4D4',
+        },
+        content: {
+          primary: '#F2F5FA',
+          secondary: '#8D9AAA',
+          muted: '#556375',
         }
       },
       fontFamily: {
+        sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
-        display: ['"Orbitron"', 'sans-serif'],
-        sans: ['"Inter"', 'sans-serif'],
       },
       boxShadow: {
-        'glow-cyan': '0 0 20px rgba(0, 240, 255, 0.35)',
-        'glow-amber': '0 0 20px rgba(255, 183, 3, 0.35)',
-        'glow-red': '0 0 20px rgba(255, 0, 84, 0.4)',
+        'subtle-surface': '0 8px 32px 0 rgba(0, 0, 0, 0.6)',
+        'cyan-glow': '0 0 24px -4px rgba(114, 221, 251, 0.3)',
+        'red-glow': '0 0 24px -4px rgba(255, 98, 107, 0.3)',
       }
     },
   },

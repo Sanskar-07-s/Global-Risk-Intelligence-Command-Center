@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Globe2, 
   ShieldAlert, 
-  Activity, 
-  Radio, 
-  Cpu, 
-  RefreshCw,
-  Search
+  Search, 
+  RefreshCw, 
+  Sparkles,
+  Command,
+  ArrowRight
 } from 'lucide-react';
 import { RiskOverview } from '../../types';
 
@@ -14,104 +14,135 @@ interface HeaderProps {
   riskOverview: RiskOverview | null;
   onRefresh: () => void;
   isRefreshing: boolean;
-  onOpenSearch: () => void;
+  onExecuteCommand: (query: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   riskOverview,
   onRefresh,
   isRefreshing,
-  onOpenSearch
+  onExecuteCommand
 }) => {
-  const [utcTime, setUtcTime] = useState<string>('');
+  const [query, setQuery] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const [utcTime, setUtcTime] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const updateTime = () => {
+    const update = () => {
       const now = new Date();
-      setUtcTime(now.toUTCString().replace('GMT', 'UTC'));
+      setUtcTime(now.toUTCString().slice(17, 25) + ' UTC');
     };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
+    update();
+    const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const threatLevel = riskOverview?.threat_level || 'ELEVATED';
-  const getThreatColor = () => {
-    switch (threatLevel) {
-      case 'CRITICAL': return 'bg-cyber-red/20 text-cyber-red border-cyber-red/50 shadow-glow-red';
-      case 'HIGH': return 'bg-cyber-amber/20 text-cyber-amber border-cyber-amber/50 shadow-glow-amber';
-      default: return 'bg-cyber-cyan/20 text-cyber-cyan border-cyber-cyan/50 shadow-glow-cyan';
-    }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    onExecuteCommand(query);
+    setIsFocused(false);
   };
 
-  return (
-    <header className="h-16 border-b border-cyber-cyan/20 bg-obsidian-950/90 backdrop-blur-md px-6 flex items-center justify-between z-40 select-none">
-      {/* Brand & System Identifier */}
-      <div className="flex items-center space-x-4">
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-cyber-cyan/10 border border-cyber-cyan/40">
-          <Globe2 className="w-6 h-6 text-cyber-cyan animate-pulse" />
-          <div className="absolute inset-0 rounded-lg border border-cyber-cyan/30 animate-pulse-ring pointer-events-none" />
-        </div>
-        <div>
-          <div className="flex items-center space-x-2">
-            <span className="font-display font-extrabold text-lg tracking-wider text-white">
-              GRICC
-            </span>
-            <span className="text-[10px] font-mono tracking-widest text-cyber-cyan px-1.5 py-0.5 rounded bg-cyber-cyan/10 border border-cyber-cyan/30">
-              v1.0.0
-            </span>
-          </div>
-          <div className="text-[11px] font-mono text-slate-400 tracking-wider">
-            GLOBAL RISK INTELLIGENCE COMMAND CENTER
-          </div>
-        </div>
-      </div>
+  const sampleQueries = [
+    "What are the most significant emerging risks in South Asia?",
+    "Show severe natural hazards in the last 24 hours.",
+    "Explain latest CISA KEV remote code execution vulnerabilities.",
+    "Evaluate compound supply chain chokepoints."
+  ];
 
-      {/* Center Intelligence Telemetry Status */}
-      <div className="hidden lg:flex items-center space-x-6 font-mono text-xs">
-        <div className={`px-3 py-1 rounded border flex items-center space-x-2 font-semibold ${getThreatColor()}`}>
-          <ShieldAlert className="w-3.5 h-3.5" />
-          <span>STATUS: {threatLevel}</span>
-          <span className="text-xs opacity-75">
-            ({riskOverview?.global_composite_risk || 0}/100)
+  const threatLevel = riskOverview?.threat_level || 'ELEVATED';
+
+  return (
+    <header className="absolute top-4 inset-x-6 z-40 flex items-center justify-between pointer-events-none select-none">
+      {/* 1. Left Brand & Telemetry Badge */}
+      <div className="flex items-center space-x-3 pointer-events-auto">
+        <div className="command-surface-elevated px-3 py-2 rounded-xl flex items-center space-x-2.5">
+          <div className="w-2 h-2 rounded-full bg-signal-cyan animate-pulse" />
+          <span className="font-semibold text-xs tracking-wider text-content-primary">
+            GRICC
+          </span>
+          <span className="text-[10px] font-mono text-content-muted">|</span>
+          <span className="text-[11px] font-mono text-content-secondary">
+            {threatLevel}
+          </span>
+          <span className="text-[10px] font-mono text-content-muted">|</span>
+          <span className="text-[11px] font-mono text-content-muted">
+            {utcTime}
           </span>
         </div>
-
-        <div className="flex items-center space-x-2 text-slate-300 bg-obsidian-900/60 px-3 py-1 rounded border border-slate-800">
-          <Activity className="w-3.5 h-3.5 text-cyber-green animate-pulse" />
-          <span>ACTIVE INCIDENTS: <strong className="text-white">{riskOverview?.total_incidents || 0}</strong></span>
-        </div>
-
-        <div className="flex items-center space-x-2 text-slate-300 bg-obsidian-900/60 px-3 py-1 rounded border border-slate-800">
-          <Radio className="w-3.5 h-3.5 text-cyber-cyan" />
-          <span>TIME: <span className="text-cyber-cyan">{utcTime}</span></span>
-        </div>
       </div>
 
-      {/* Right Action Tools */}
-      <div className="flex items-center space-x-3">
-        <button
-          onClick={onOpenSearch}
-          className="flex items-center space-x-2 text-xs font-mono text-slate-300 bg-obsidian-900 hover:bg-obsidian-850 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-cyber-cyan/50 transition-colors"
-          title="Natural Language Intelligence Search (Ctrl+K)"
-        >
-          <Search className="w-3.5 h-3.5 text-cyber-cyan" />
-          <span className="hidden sm:inline">QUERY DESK</span>
-          <kbd className="text-[10px] bg-obsidian-950 px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">⌘K</kbd>
-        </button>
+      {/* 2. Center Natural Language Command Prompt */}
+      <div className="relative w-full max-w-xl mx-4 pointer-events-auto">
+        <form onSubmit={handleSubmit}>
+          <div className={`command-surface transition-all duration-200 rounded-xl flex items-center px-3.5 py-2 ${
+            isFocused ? 'command-surface-active' : 'hover:border-surface-border-active'
+          }`}>
+            <Search className="w-4 h-4 text-content-secondary flex-shrink-0 mr-2.5" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+              placeholder="Ask an intelligence question or filter global events... (Enter to submit)"
+              className="w-full text-xs font-sans bg-transparent text-content-primary placeholder-content-muted focus:outline-none"
+            />
+            {query.trim() && (
+              <button
+                type="submit"
+                className="p-1 rounded bg-signal-cyan/20 text-signal-cyan hover:bg-signal-cyan/30 transition-colors ml-2"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <kbd className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-elevated text-content-muted border border-surface-border ml-2">
+              ⌘K
+            </kbd>
+          </div>
+        </form>
 
+        {/* Suggested Queries Dropdown */}
+        {isFocused && (
+          <div className="absolute top-full left-0 right-0 mt-2 command-surface-elevated rounded-xl p-2.5 space-y-1 text-xs font-mono shadow-subtle-surface">
+            <div className="text-[10px] text-content-muted px-2 py-1 uppercase tracking-wider">
+              SUGGESTED INTELLIGENCE COMMANDS
+            </div>
+            {sampleQueries.map((sq, i) => (
+              <button
+                key={i}
+                type="button"
+                onMouseDown={() => {
+                  setQuery(sq);
+                  onExecuteCommand(sq);
+                }}
+                className="w-full text-left px-2 py-1.5 rounded hover:bg-surface-subtle text-content-secondary hover:text-content-primary flex items-center space-x-2 transition-colors"
+              >
+                <Sparkles className="w-3 h-3 text-signal-cyan flex-shrink-0" />
+                <span className="truncate">{sq}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 3. Right Status & Refresh Action */}
+      <div className="flex items-center space-x-2 pointer-events-auto">
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="p-2 rounded-lg bg-obsidian-900 hover:bg-obsidian-850 border border-slate-700 hover:border-cyber-cyan/50 text-slate-300 hover:text-cyber-cyan transition-colors"
-          title="Refresh All Multi-Source Sensors"
+          className="command-surface-elevated p-2 rounded-xl text-content-secondary hover:text-signal-cyan transition-colors"
+          title="Refresh multi-domain sensor feeds"
         >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-cyber-cyan' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-signal-cyan' : ''}`} />
         </button>
 
-        <div className="flex items-center space-x-2 pl-2 border-l border-slate-800">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyber-green" />
-          <span className="text-xs font-mono text-slate-300 hidden md:inline">SYSTEM ONLINE</span>
+        <div className="command-surface-elevated px-3 py-2 rounded-xl flex items-center space-x-2 text-xs font-mono text-content-secondary">
+          <span className="w-1.5 h-1.5 rounded-full bg-signal-green" />
+          <span className="hidden md:inline">SENSORS ONLINE</span>
         </div>
       </div>
     </header>

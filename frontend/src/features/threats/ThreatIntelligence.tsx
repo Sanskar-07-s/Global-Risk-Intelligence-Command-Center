@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { NormalizedEvent } from '../../types';
 import { 
-  ShieldAlert, 
-  Terminal, 
   Flame, 
-  AlertOctagon, 
   Search, 
-  ExternalLink,
-  Cpu
+  ExternalLink, 
+  ShieldAlert, 
+  Radio, 
+  Terminal,
+  Filter
 } from 'lucide-react';
 
 interface ThreatIntelligenceProps {
@@ -34,45 +34,40 @@ export const ThreatIntelligence: React.FC<ThreatIntelligenceProps> = ({
   });
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] p-6 overflow-y-auto space-y-6 select-none">
-      {/* Top Threat Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl glass-panel-glow border-cyber-amber/30">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 rounded-lg bg-cyber-amber/15 border border-cyber-amber/40 text-cyber-amber">
-            <Flame className="w-6 h-6 animate-pulse" />
+    <div className="w-full h-full p-8 pt-24 pl-24 overflow-y-auto space-y-6 select-none bg-space">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="text-[11px] font-mono text-signal-amber uppercase tracking-wider">
+            THREAT VECTORS // CYBER & KINETIC
           </div>
-          <div>
-            <div className="text-xs font-mono text-cyber-amber uppercase tracking-wider">
-              THREAT INTELLIGENCE WORKSPACE // ACTIVE VECTORS
-            </div>
-            <h1 className="text-lg font-bold text-white">
-              CISA KEV Weaponized Vulnerabilities & Kinetic Hostilities
-            </h1>
-          </div>
+          <h1 className="text-xl font-semibold text-content-primary mt-1">
+            CISA KEV Weaponized Vulnerabilities & Geopolitical Instability
+          </h1>
         </div>
 
-        {/* Filter Controls */}
-        <div className="flex items-center space-x-2">
+        {/* Filter Pills */}
+        <div className="command-surface-elevated p-1 rounded-xl flex items-center space-x-1">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
-              filterType === 'all' ? 'bg-cyber-cyan/20 border-cyber-cyan text-cyber-cyan' : 'bg-obsidian-900 border-slate-700 text-slate-400'
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors ${
+              filterType === 'all' ? 'bg-signal-cyan/20 text-signal-cyan' : 'text-content-secondary hover:text-content-primary'
             }`}
           >
-            All Threats
+            All Threat Vectors ({threatEvents.length})
           </button>
           <button
             onClick={() => setFilterType('cyber')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
-              filterType === 'cyber' ? 'bg-cyber-amber/20 border-cyber-amber text-cyber-amber' : 'bg-obsidian-900 border-slate-700 text-slate-400'
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors ${
+              filterType === 'cyber' ? 'bg-signal-amber/20 text-signal-amber' : 'text-content-secondary hover:text-content-primary'
             }`}
           >
-            Cyber Exploits (CISA)
+            Active CVEs (CISA)
           </button>
           <button
             onClick={() => setFilterType('geopolitical')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
-              filterType === 'geopolitical' ? 'bg-cyber-red/20 border-cyber-red text-cyber-red' : 'bg-obsidian-900 border-slate-700 text-slate-400'
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors ${
+              filterType === 'geopolitical' ? 'bg-signal-red/20 text-signal-red' : 'text-content-secondary hover:text-content-primary'
             }`}
           >
             Geopolitical (GDELT)
@@ -80,63 +75,66 @@ export const ThreatIntelligence: React.FC<ThreatIntelligenceProps> = ({
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      {/* Search Input */}
+      <div className="relative max-w-xl">
+        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-content-muted" />
         <input
           type="text"
-          placeholder="Filter threats by CVE, targeted product, malware campaign, or actor..."
+          placeholder="Filter by CVE, software vendor, exploit campaign, or regional hotspot..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full text-xs font-mono bg-obsidian-900/90 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyber-cyan/60"
+          className="w-full command-surface text-xs font-mono rounded-xl pl-10 pr-4 py-2.5 text-content-primary placeholder-content-muted focus:outline-none focus:border-surface-border-active"
         />
       </div>
 
-      {/* Threats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Threat Stream Feed (Minimalist Row List) */}
+      <div className="space-y-2.5">
         {threatEvents.map((threat) => (
           <div
             key={threat.id}
             onClick={() => onSelectEvent(threat)}
-            className="p-4 rounded-xl glass-panel hover:glass-panel-glow border-slate-800 hover:border-cyber-cyan/40 transition-all cursor-pointer flex flex-col justify-between"
+            className="command-surface hover:command-surface-elevated p-4 rounded-xl flex items-start justify-between gap-4 cursor-pointer transition-all duration-150"
           >
-            <div>
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-obsidian-950 border border-slate-700 text-cyber-cyan uppercase">
-                  {threat.category || threat.domain}
-                </span>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
-                  threat.severity === 'critical' ? 'bg-cyber-red/20 text-cyber-red border-cyber-red/50' : 'bg-cyber-amber/20 text-cyber-amber border-cyber-amber/50'
+            <div className="space-y-1 flex-1">
+              <div className="flex items-center space-x-2 text-[10px] font-mono">
+                <span className={`px-2 py-0.5 rounded uppercase font-semibold ${
+                  threat.severity === 'critical' ? 'bg-signal-red/20 text-signal-red' : 'bg-signal-amber/20 text-signal-amber'
                 }`}>
                   {threat.severity}
                 </span>
+                <span className="text-content-muted uppercase">
+                  {threat.source.toUpperCase()} // {threat.category || threat.domain}
+                </span>
+                <span className="text-content-muted">•</span>
+                <span className="text-content-secondary">
+                  {threat.occurrence_time ? new Date(threat.occurrence_time).toLocaleDateString() : 'Active'}
+                </span>
               </div>
 
-              <h3 className="text-sm font-semibold text-white mt-2 line-clamp-2">
+              <h3 className="text-sm font-semibold text-content-primary">
                 {threat.title}
               </h3>
 
-              <p className="text-xs text-slate-400 mt-2 line-clamp-3 font-sans leading-relaxed">
+              <p className="text-xs font-sans text-content-secondary line-clamp-2 leading-relaxed">
                 {threat.description}
               </p>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-400">
-                SCORE: <strong className="text-cyber-cyan">{threat.calculated_risk_score}</strong>
-              </span>
-              <span className="text-slate-400">
-                CONF: <strong className="text-cyber-green">{Math.round(threat.confidence * 100)}%</strong>
-              </span>
+            <div className="flex flex-col items-end space-y-2 flex-shrink-0 text-right">
+              <div className="text-xs font-mono">
+                <span className="text-content-muted">RISK: </span>
+                <strong className="text-signal-cyan">{threat.calculated_risk_score}</strong>
+              </div>
+
               {threat.source_url && (
                 <a
                   href={threat.source_url}
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="text-cyber-cyan hover:underline flex items-center space-x-1"
+                  className="text-xs font-mono text-content-muted hover:text-signal-cyan flex items-center space-x-1"
                 >
-                  <span>ADVISORY</span>
+                  <span>Advisory</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               )}
