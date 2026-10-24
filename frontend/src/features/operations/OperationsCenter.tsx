@@ -26,12 +26,14 @@ export const OperationsCenter: React.FC<OperationsCenterProps> = ({
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
   const [showFilters, setShowFilters] = useState<boolean>(false);
 
-  // Filter events by domain if requested safely
-  const filteredEvents = (events || []).filter(ev => {
-    if (!ev || typeof ev !== 'object') return false;
-    if (selectedDomain !== 'all' && ev.domain !== selectedDomain) return false;
-    return true;
-  });
+  // Filter events by domain if requested safely (memoized to prevent child rerenders)
+  const filteredEvents = React.useMemo(() => {
+    return (events || []).filter(ev => {
+      if (!ev || typeof ev !== 'object') return false;
+      if (selectedDomain !== 'all' && ev.domain !== selectedDomain) return false;
+      return true;
+    });
+  }, [events, selectedDomain]);
 
   const domains = [
     { id: 'all', label: 'All Domains' },

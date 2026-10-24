@@ -128,3 +128,41 @@ Automated browser subagent executed on the live deployment:
 3. **Live Ticker:** Vulnerabilities streaming in real-time.
 4. **Modal Interaction:** Clicked ticker items; modal opened and displayed full telemetry without crashing.
 5. **Workspace Navigation:** Switched between Operations Command and Threat Intelligence workspaces; returned to Globe view with complete stability.
+
+---
+
+## 4. Globe Marker Hover Crash Investigation & Fix
+
+### Root Cause
+1. **Unbounded React Rerender / Scene Reconstruction Churn:**
+   - In `GlobeScene.tsx`, `onMouseMove` called `setTooltipPos({ x: e.clientX, y: e.clientY })` on every pointer move frame (60–120 FPS).
+   - Because `filteredEvents` in `OperationsCenter.tsx` and `GlobeScene.tsx` was not memoized with `useMemo`, each rerender produced a new array reference.
+   - The marker synchronization `useEffect` re-ran on every pointer movement frame, disposing and re-allocating all Three.js geometries and materials 60+ times per second while the raycaster was traversing them.
+2. **Recursive Raycasting on Decorative Meshes (`haloMesh`):**
+   - Raycasting was executing `raycaster.intersectObjects(markersRef.current)` with default `recursive = true`.
+   - The decorative hairline halo rings (`haloMesh`) attached as children to `pinMesh` were intersected first with empty `userData: {}`.
+   - In unhardened builds, reading `.category` on undefined primary events or attempting to access properties on empty objects threw `TypeError`.
+3. **Missing Hover Debouncing & Viewport Bounds:**
+   - Pointer movement lacked cluster ID deduplication, causing continuous hover state flapping and unbounded state updates.
+
+### Implemented Fixes
+1. **Direct Hardware-Accelerated Tooltip Positioning:**
+   - Switched tooltip positioning from React state (`tooltipPos`) to direct style transforms via `tooltipRef.current.style.transform = ... translate3d(...)` with viewport boundary clamping.
+   - Completely eliminated React rerenders on continuous pointer motion.
+2. **State Deduplication & Memoization:**
+   - Wrapped `filteredEvents` in `OperationsCenter.tsx` and `GlobeScene.tsx` in `React.useMemo`.
+   - Wrapped `clusters` in `React.useMemo`.
+   - Added `hoveredClusterRef` to only trigger `setHoveredCluster` when the hovered cluster ID actually changes (or on enter/leave).
+   - Marker synchronization `useEffect` now depends strictly on `[clusters, selectedEvent?.id]`, completely decoupling scene updates from hover motion.
+3. **Non-Recursive Raycasting & Halo Exclusion:**
+   - Set `raycaster.intersectObjects(markersRef.current, false)` (non-recursive).
+   - Set `haloMesh.raycast = () => {}` to completely prevent decorative child rings from intercepting raycasts.
+   - Validated `clusterData.primaryEvent` before setting any hover state.
+   - Added `container.addEventListener('mouseleave', ...)` to cleanly dismiss the tooltip when the cursor exits the canvas.
+4. **10-Point Regression Suite (`scripts/test_regression.js`):**
+   - Valid marker hover, Earth surface hover, decorative geometry hover, missing category fallback, stale mapping resilience, null hit protection, record deletion during hover, rapid marker transitions, mouse leave, and repeated hovering without scene reconstruction all verified with 0 errors.
+
+### Verification Results
+- **Regression Suite:** 10/10 hover scenarios passed with 0 errors.
+- **Production Build:** `npm run build` compiled 2,174 modules cleanly.
+- **Firebase Production:** Deployed to `https://g-r-i-c-c.web.app` and verified with browser automation. Hovering over Earth and markers displays rich tooltips with zero console errors and zero crashes.

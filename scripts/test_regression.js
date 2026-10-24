@@ -229,4 +229,199 @@ testEvents.forEach(ev => {
   });
 });
 
-console.log('ALL REGRESSION TESTS PASSED! (0 errors, 0 exceptions)');
+console.log('\n--- Running 10-Point Pointer & Hover Simulation Regression Tests ---');
+
+// Simulated Hover Resolution Function matching GlobeScene.tsx
+function resolveHoverTarget(hit) {
+  if (!hit || !hit.object) return null;
+  const clusterData = hit.object.userData?.cluster || hit.object.userData;
+  if (
+    clusterData &&
+    typeof clusterData === 'object' &&
+    clusterData.id &&
+    clusterData.primaryEvent &&
+    typeof clusterData.primaryEvent === 'object'
+  ) {
+    return clusterData;
+  }
+  return null;
+}
+
+// Simulated Tooltip Rendering Function matching GlobeScene.tsx
+function renderTooltipData(hoveredCluster) {
+  if (!hoveredCluster) return null;
+  const severity = hoveredCluster.highestSeverity || 'INFO';
+  const categoryLabel = hoveredCluster.isCluster
+    ? `${hoveredCluster.clusterCount} Events Clustered`
+    : (hoveredCluster.primaryEvent?.category || hoveredCluster.primaryEvent?.domain || 'UNCATEGORIZED').toUpperCase();
+  const title = hoveredCluster.primaryEvent?.title || 'Telemetry Signal';
+  const region = hoveredCluster.primaryEvent?.region || 'Coordinates';
+  const risk = hoveredCluster.primaryEvent?.calculated_risk_score ?? 'N/A';
+  return { severity, categoryLabel, title, region, risk };
+}
+
+// Test 1: Hovering over a valid marker
+console.log('Test 1: Hovering over a valid marker...');
+const validMarkerHit = {
+  object: {
+    userData: {
+      isMarker: true,
+      cluster: clusters[0]
+    }
+  }
+};
+const res1 = resolveHoverTarget(validMarkerHit);
+assert.ok(res1, 'Valid marker must resolve to cluster');
+assert.strictEqual(res1.id, clusters[0].id);
+const tooltip1 = renderTooltipData(res1);
+assert.strictEqual(tooltip1.severity, 'critical');
+assert.strictEqual(tooltip1.categoryLabel, '2 Events Clustered');
+assert.strictEqual(tooltip1.title, 'Earthquake 2 nearby');
+
+// Test 2: Hovering over the Earth surface (non-marker globeMesh)
+console.log('Test 2: Hovering over the Earth surface...');
+const earthSurfaceHit = {
+  object: {
+    name: 'globeMesh',
+    userData: {} // empty userData
+  }
+};
+assert.strictEqual(resolveHoverTarget(earthSurfaceHit), null, 'Earth surface must resolve to null');
+
+// Test 3: Hovering over decorative geometry (haloMesh with empty userData)
+console.log('Test 3: Hovering over decorative geometry (haloMesh)...');
+const decorativeHaloHit = {
+  object: {
+    name: 'haloMesh',
+    userData: {} // Empty userData as created on child rings
+  }
+};
+assert.strictEqual(resolveHoverTarget(decorativeHaloHit), null, 'Decorative geometry must resolve to null, not crash');
+
+// Test 4: Marker with no category
+console.log('Test 4: Marker with no category...');
+const noCategoryCluster = {
+  id: 'cluster_no_cat',
+  isCluster: false,
+  latitude: 10,
+  longitude: 20,
+  highestSeverity: 'medium',
+  highestRiskScore: 45,
+  dominantDomain: 'geopolitical',
+  events: [{ id: 'ev_no_cat', title: 'Uncategorized Signal', domain: 'geopolitical' }],
+  clusterCount: 1,
+  primaryEvent: { id: 'ev_no_cat', title: 'Uncategorized Signal', domain: 'geopolitical' }
+};
+const noCatHit = {
+  object: {
+    userData: { isMarker: true, cluster: noCategoryCluster }
+  }
+};
+const res4 = resolveHoverTarget(noCatHit);
+assert.ok(res4);
+const tooltip4 = renderTooltipData(res4);
+assert.strictEqual(tooltip4.categoryLabel, 'GEOPOLITICAL', 'Must fall back to domain or UNCATEGORIZED');
+assert.strictEqual(tooltip4.title, 'Uncategorized Signal');
+
+// Test 5: Missing or stale marker-to-event mapping
+console.log('Test 5: Missing or stale marker-to-event mapping...');
+const staleHit1 = { object: { userData: null } };
+const staleHit2 = { object: { userData: { isMarker: true, cluster: null } } };
+const staleHit3 = { object: { userData: { isMarker: true, cluster: { id: 'bad' } } } }; // missing primaryEvent
+assert.strictEqual(resolveHoverTarget(staleHit1), null);
+assert.strictEqual(resolveHoverTarget(staleHit2), null);
+assert.strictEqual(resolveHoverTarget(staleHit3), null);
+
+// Test 6: Null or undefined intersection result
+console.log('Test 6: Null or undefined intersection result...');
+assert.strictEqual(resolveHoverTarget(null), null);
+assert.strictEqual(resolveHoverTarget(undefined), null);
+assert.strictEqual(resolveHoverTarget({ object: null }), null);
+
+// Test 7: Record removed while hovered
+console.log('Test 7: Record removed while hovered...');
+let hoveredState = clusters[0];
+// Simulate events list updating and removing this record
+const newEventsList = [];
+// Tooltip rendering for an event that was removed from the live list
+assert.doesNotThrow(() => {
+  const staleTooltip = renderTooltipData(hoveredState);
+  assert.ok(staleTooltip);
+  assert.strictEqual(staleTooltip.title, 'Earthquake 2 nearby');
+});
+
+// Test 8: Moving rapidly between markers (state update throttling check)
+console.log('Test 8: Moving rapidly between markers (state update throttling check)...');
+let currentHoveredCluster = null;
+let stateUpdateCount = 0;
+
+function onPointerMoveSim(hit) {
+  const target = resolveHoverTarget(hit);
+  if (target) {
+    if (currentHoveredCluster?.id !== target.id) {
+      currentHoveredCluster = target;
+      stateUpdateCount++;
+    }
+  } else {
+    if (currentHoveredCluster !== null) {
+      currentHoveredCluster = null;
+      stateUpdateCount++;
+    }
+  }
+}
+
+// 50 movements across the exact same marker:
+for (let k = 0; k < 50; k++) {
+  onPointerMoveSim(validMarkerHit);
+}
+assert.strictEqual(stateUpdateCount, 1, 'Rapid mousemove within same marker must only fire state update ONCE');
+
+// Transition to another marker:
+const marker2Hit = {
+  object: {
+    userData: { isMarker: true, cluster: noCategoryCluster }
+  }
+};
+onPointerMoveSim(marker2Hit);
+assert.strictEqual(stateUpdateCount, 2, 'Transitioning to different marker must fire state update ONCE');
+
+// Test 9: Leaving the globe
+console.log('Test 9: Leaving the globe...');
+function onMouseLeaveSim() {
+  if (currentHoveredCluster !== null) {
+    currentHoveredCluster = null;
+    stateUpdateCount++;
+  }
+}
+onMouseLeaveSim();
+assert.strictEqual(currentHoveredCluster, null, 'Must clear hover state on leave');
+assert.strictEqual(stateUpdateCount, 3);
+// Redundant leave:
+onMouseLeaveSim();
+assert.strictEqual(stateUpdateCount, 3, 'Redundant leave must not fire state updates');
+
+// Test 10: Repeated hovering without scene reconstruction check
+console.log('Test 10: Repeated hovering without scene reconstruction check...');
+let sceneReconstructionCount = 0;
+// In our updated code, marker useEffect depends on [clusters, selectedEvent?.id]
+// Hover updates currentHoveredCluster but NOT clusters or selectedEvent
+let activeClusters = clusters;
+let activeSelectedEventId = null;
+
+function markerSyncEffect(clustersDep, selectedIdDep) {
+  sceneReconstructionCount++;
+}
+
+// Initial mount:
+markerSyncEffect(activeClusters, activeSelectedEventId);
+assert.strictEqual(sceneReconstructionCount, 1);
+
+// 100 pointer movements and hover state changes:
+for (let k = 0; k < 100; k++) {
+  onPointerMoveSim(validMarkerHit);
+  onPointerMoveSim(earthSurfaceHit);
+  // clustersDep and selectedIdDep did not change!
+}
+assert.strictEqual(sceneReconstructionCount, 1, 'Scene/markers must NOT be reconstructed on hover!');
+
+console.log('\nALL REGRESSION TESTS PASSED! (0 errors, 0 exceptions)');

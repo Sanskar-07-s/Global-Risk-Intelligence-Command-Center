@@ -41,20 +41,48 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
   const [activeLayer, setActiveLayer] = useState<'all' | 'seismic' | 'hazards' | 'weather'>('all');
   const [hoveredCluster, setHoveredCluster] = useState<EventCluster | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [webGlAvailable, setWebGlAvailable] = useState<boolean>(true);
   const [textureLoaded, setTextureLoaded] = useState<boolean>(false);
 
-  // Filter events based on active layer safely
-  const filteredEvents = (events || []).filter(e => {
-    if (!e || typeof e !== 'object') return false;
-    const cat = String(e.category || '').toLowerCase();
-    const dom = String(e.domain || '').toLowerCase();
-    if (activeLayer === 'seismic') return cat === 'earthquake' || dom === 'natural_hazard';
-    if (activeLayer === 'hazards') return dom === 'natural_hazard';
-    if (activeLayer === 'weather') return dom === 'weather_extreme';
-    return true;
-  });
+  const hoveredClusterRef = useRef<EventCluster | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Safely memoize filtered events so array reference does not change on every render
+  const filteredEvents = React.useMemo(() => {
+    return (events || []).filter(e => {
+      if (!e || typeof e !== 'object') return false;
+      const cat = String(e.category || '').toLowerCase();
+      const dom = String(e.domain || '').toLowerCase();
+      if (activeLayer === 'seismic') return cat === 'earthquake' || dom === 'natural_hazard';
+      if (activeLayer === 'hazards') return dom === 'natural_hazard';
+      if (activeLayer === 'weather') return dom === 'weather_extreme';
+      return true;
+    });
+  }, [events, activeLayer]);
+
+  // Safely memoize clusters to prevent re-clustering and marker rebuilds on hover
+  const clusters = React.useMemo(() => {
+    return clusterEvents(filteredEvents, 3.5);
+  }, [filteredEvents]);
+
+  // Viewport-aware direct tooltip positioning without triggering React rerenders
+  const updateTooltipPosition = (clientX: number, clientY: number) => {
+    if (!tooltipRef.current) return;
+    const tooltipWidth = 260;
+    const tooltipHeight = 110;
+    const margin = 16;
+    const clampedX = Math.min(window.innerWidth - tooltipWidth / 2 - margin, Math.max(tooltipWidth / 2 + margin, clientX));
+    // If too close to the top of the viewport, display below cursor instead of above
+    const clampedY = clientY - 15 < tooltipHeight + margin ? clientY + tooltipHeight + 25 : clientY - 15;
+    tooltipRef.current.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0) translate(-50%, -100%)`;
+  };
+
+  React.useEffect(() => {
+    if (hoveredCluster && lastMousePosRef.current) {
+      updateTooltipPosition(lastMousePosRef.current.x, lastMousePosRef.current.y);
+    }
+  }, [hoveredCluster]);
 
   // Main Three.js Scene Setup
   useEffect(() => {
@@ -251,37 +279,58 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1
-      );
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
 
-      // Raycast markers
-      if (cameraRef.current) {
+      const rect = container.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && cameraRef.current && markersRef.current.length > 0) {
+        const mouse = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        // Raycast markers non-recursively (ignoring decorative child meshes)
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, cameraRef.current);
-        const intersects = raycaster.intersectObjects(markersRef.current);
+        const intersects = raycaster.intersectObjects(markersRef.current, false);
 
         // Filter out back-facing occluded markers
         const visibleIntersects = intersects.filter(hit => {
+          if (!hit || !hit.object) return false;
           const worldPos = new THREE.Vector3();
           hit.object.getWorldPosition(worldPos);
-          const camDir = cameraRef.current!.position.clone().sub(worldPos).normalize();
+          if (!cameraRef.current) return false;
+          const camDir = cameraRef.current.position.clone().sub(worldPos).normalize();
           return worldPos.clone().normalize().dot(camDir) > 0.12;
         });
 
         if (visibleIntersects.length > 0) {
           const hit = visibleIntersects[0].object as THREE.Mesh;
-          const cluster = hit.userData as EventCluster;
-          if (cluster) {
-            setHoveredCluster(cluster);
-            setTooltipPos({ x: e.clientX, y: e.clientY });
+          const clusterData = (hit.userData as { cluster?: EventCluster })?.cluster || (hit.userData as EventCluster);
+          if (
+            clusterData &&
+            typeof clusterData === 'object' &&
+            clusterData.id &&
+            clusterData.primaryEvent &&
+            typeof clusterData.primaryEvent === 'object'
+          ) {
+            if (hoveredClusterRef.current?.id !== clusterData.id) {
+              hoveredClusterRef.current = clusterData;
+              setHoveredCluster(clusterData);
+            }
+            updateTooltipPosition(e.clientX, e.clientY);
             container.style.cursor = 'pointer';
+          } else {
+            if (hoveredClusterRef.current !== null) {
+              hoveredClusterRef.current = null;
+              setHoveredCluster(null);
+            }
+            container.style.cursor = isDragging ? 'grabbing' : 'grab';
           }
         } else {
-          setHoveredCluster(null);
-          setTooltipPos(null);
+          if (hoveredClusterRef.current !== null) {
+            hoveredClusterRef.current = null;
+            setHoveredCluster(null);
+          }
           container.style.cursor = isDragging ? 'grabbing' : 'grab';
         }
       }
@@ -294,6 +343,14 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       globeGroup.rotation.x = Math.max(-1.1, Math.min(1.1, globeGroup.rotation.x + deltaY * 0.005));
 
       prevMouse = { x: e.clientX, y: e.clientY };
+    };
+
+    const onMouseLeave = () => {
+      if (hoveredClusterRef.current !== null) {
+        hoveredClusterRef.current = null;
+        setHoveredCluster(null);
+      }
+      container.style.cursor = 'grab';
     };
 
     const onMouseUp = () => {
@@ -311,27 +368,30 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
     const onClick = (e: MouseEvent) => {
       const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0 || !cameraRef.current) return;
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
         -((e.clientY - rect.top) / rect.height) * 2 + 1
       );
 
       const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(markersRef.current);
+      raycaster.setFromCamera(mouse, cameraRef.current);
+      const intersects = raycaster.intersectObjects(markersRef.current, false);
 
       const visibleIntersects = intersects.filter(hit => {
+        if (!hit || !hit.object) return false;
         const worldPos = new THREE.Vector3();
         hit.object.getWorldPosition(worldPos);
-        const camDir = camera.position.clone().sub(worldPos).normalize();
+        if (!cameraRef.current) return false;
+        const camDir = cameraRef.current.position.clone().sub(worldPos).normalize();
         return worldPos.clone().normalize().dot(camDir) > 0.12;
       });
 
       if (visibleIntersects.length > 0) {
         const hit = visibleIntersects[0].object as THREE.Mesh;
-        const cluster = hit.userData as EventCluster;
-        if (cluster && cluster.primaryEvent) {
-          onSelectEvent(cluster.primaryEvent);
+        const clusterData = (hit.userData as { cluster?: EventCluster })?.cluster || (hit.userData as EventCluster);
+        if (clusterData && clusterData.primaryEvent && typeof onSelectEvent === 'function') {
+          onSelectEvent(clusterData.primaryEvent);
         }
       }
     };
@@ -339,6 +399,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     container.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+    container.addEventListener('mouseleave', onMouseLeave);
     container.addEventListener('wheel', onWheel, { passive: false });
     container.addEventListener('click', onClick);
 
@@ -378,6 +439,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       container.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      container.removeEventListener('mouseleave', onMouseLeave);
       container.removeEventListener('wheel', onWheel);
       container.removeEventListener('click', onClick);
       window.removeEventListener('resize', handleResize);
@@ -402,22 +464,24 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     if (!globeGroupRef.current) return;
     const globeGroup = globeGroupRef.current;
 
-    // Dispose old markers
+    // Safely dispose old markers and their children (halo rings)
     markersRef.current.forEach(mesh => {
       globeGroup.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach(m => m.dispose());
-      } else if (mesh.material) {
-        mesh.material.dispose();
-      }
+      mesh.traverse(child => {
+        if ((child as THREE.Mesh).geometry) {
+          (child as THREE.Mesh).geometry.dispose();
+        }
+        const mat = (child as THREE.Mesh).material;
+        if (Array.isArray(mat)) {
+          mat.forEach(m => m.dispose());
+        } else if (mat) {
+          mat.dispose();
+        }
+      });
     });
     markersRef.current = [];
 
     const globeRadius = 78;
-
-    // Cluster geographically overlapping events (< 3.5 degrees)
-    const clusters = clusterEvents(filteredEvents, 3.5);
 
     clusters.forEach(cluster => {
       if (!cluster || !cluster.primaryEvent) return;
@@ -470,12 +534,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       });
       const pinMesh = new THREE.Mesh(pinGeo, pinMat);
       pinMesh.position.set(x, y, z);
-      pinMesh.userData = cluster;
+      pinMesh.userData = { isMarker: true, cluster };
 
       // Orient perpendicular to the surface of the Earth
       pinMesh.lookAt(new THREE.Vector3(x * 2, y * 2, z * 2));
 
-      // Crisp hairline halo ring
+      // Crisp hairline halo ring (purely decorative - disabled from raycasting)
       const haloGeo = new THREE.RingGeometry(baseRadius * 1.15, baseRadius * 1.45, 16);
       const haloMat = new THREE.MeshBasicMaterial({
         color: colorHex,
@@ -486,12 +550,13 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         depthWrite: false
       });
       const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+      haloMesh.raycast = () => {}; // Ignore raycasting on halo rings
       pinMesh.add(haloMesh);
 
       globeGroup.add(pinMesh);
       markersRef.current.push(pinMesh);
     });
-  }, [filteredEvents, selectedEvent]);
+  }, [clusters, selectedEvent?.id]);
 
   // Selected Event Orientation (Only when lat/lon coordinates are valid)
   useEffect(() => {
@@ -613,13 +678,14 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         </button>
       </div>
 
-      {/* Hover Tooltip Surface */}
-      {hoveredCluster && tooltipPos && (
+      {/* Hover Tooltip Surface (Viewport-bound, pointer-events-none, hardware-accelerated transform) */}
+      {hoveredCluster && (
         <div
-          className="fixed pointer-events-none z-50 transform -translate-x-1/2 -translate-y-full mb-3"
-          style={{ left: `${tooltipPos.x}px`, top: `${tooltipPos.y}px` }}
+          ref={tooltipRef}
+          className="fixed pointer-events-none z-50 top-0 left-0 will-change-transform"
+          style={{ transform: 'translate3d(-9999px, -9999px, 0)' }}
         >
-          <div className="command-surface-elevated p-2.5 rounded-xl border border-surface-border text-xs font-mono shadow-subtle-surface space-y-1 min-w-[190px] max-w-xs animate-fade-in">
+          <div className="command-surface-elevated p-2.5 rounded-xl border border-surface-border text-xs font-mono shadow-subtle-surface space-y-1 min-w-[200px] max-w-xs animate-fade-in">
             <div className="flex items-center justify-between">
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
                 hoveredCluster.highestSeverity === 'critical' ? 'bg-signal-red/20 text-signal-red' :
@@ -630,14 +696,14 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
               <span className="text-[10px] text-content-muted">
                 {hoveredCluster.isCluster 
                   ? `${hoveredCluster.clusterCount} Events Clustered` 
-                  : (hoveredCluster.primaryEvent?.category || hoveredCluster.primaryEvent?.domain || 'INCIDENT').toUpperCase()}
+                  : (hoveredCluster.primaryEvent?.category || hoveredCluster.primaryEvent?.domain || 'UNCATEGORIZED').toUpperCase()}
               </span>
             </div>
             <div className="font-semibold text-content-primary line-clamp-2">
-              {hoveredCluster.primaryEvent?.title || 'Unknown Incident'}
+              {hoveredCluster.primaryEvent?.title || 'Telemetry Signal'}
             </div>
             <div className="flex items-center justify-between text-[10px] text-content-muted border-t border-surface-border/50 pt-1 mt-1">
-              <span className="flex items-center space-x-1 truncate max-w-[120px]">
+              <span className="flex items-center space-x-1 truncate max-w-[130px]">
                 <MapPin className="w-3 h-3 text-signal-cyan flex-shrink-0" />
                 <span className="truncate">{hoveredCluster.primaryEvent?.region || 'Coordinates'}</span>
               </span>
