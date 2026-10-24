@@ -4,10 +4,15 @@
 
 @layer base {
   body {
-    @apply bg-space text-content-primary font-sans antialiased overflow-hidden select-none;
     background-color: #05070B;
+    color: #F2F5FA;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
   }
 }
+
 
 /* Minimalist Refined Floating Surfaces */
 .command-surface {

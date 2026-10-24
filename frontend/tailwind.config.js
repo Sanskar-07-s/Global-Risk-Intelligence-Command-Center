@@ -7,19 +7,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        space: {
-          DEFAULT: '#05070B',
-          950: '#030508',
-          900: '#070A10',
-          850: '#0B1018',
-        },
-        surface: {
-          DEFAULT: '#0B1018',
-          elevated: '#111925',
-          subtle: '#162030',
-          border: 'rgba(255, 255, 255, 0.08)',
-          'border-active': 'rgba(114, 221, 251, 0.35)',
-        },
+        space: '#05070B',
+        'space-950': '#030508',
+        'space-900': '#070A10',
+        'space-850': '#0B1018',
+
+        surface: '#0B1018',
+        'surface-elevated': '#111925',
+        'surface-subtle': '#162030',
+        'surface-border': 'rgba(255, 255, 255, 0.08)',
+        'surface-border-active': 'rgba(114, 221, 251, 0.35)',
+
         signal: {
           cyan: '#72DDFB',
           amber: '#FFBD69',
@@ -27,11 +25,20 @@ export default {
           green: '#80D7A2',
           ice: '#A5C4D4',
         },
+        'signal-cyan': '#72DDFB',
+        'signal-amber': '#FFBD69',
+        'signal-red': '#FF626B',
+        'signal-green': '#80D7A2',
+        'signal-ice': '#A5C4D4',
+
         content: {
           primary: '#F2F5FA',
           secondary: '#8D9AAA',
           muted: '#556375',
-        }
+        },
+        'content-primary': '#F2F5FA',
+        'content-secondary': '#8D9AAA',
+        'content-muted': '#556375',
       },
       fontFamily: {
         sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
