@@ -6,9 +6,15 @@ import {
   RefreshCw, 
   Sparkles,
   Command,
-  ArrowRight
+  ArrowRight,
+  Radio,
+  Server,
+  AlertTriangle,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { RiskOverview } from '../../types';
+import { api, TelemetryStatus } from '../../services/api';
 
 interface HeaderProps {
   riskOverview: RiskOverview | null;
@@ -26,12 +32,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [utcTime, setUtcTime] = useState('');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [telemetry, setTelemetry] = useState<TelemetryStatus>(api.getTelemetryStatus());
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const update = () => {
       const now = new Date();
       setUtcTime(now.toUTCString().slice(17, 25) + ' UTC');
+      setTelemetry(api.getTelemetryStatus());
     };
     update();
     const interval = setInterval(update, 1000);
@@ -53,6 +62,38 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   const threatLevel = riskOverview?.threat_level || 'ELEVATED';
+
+  // Determine badge styling based on real telemetry status
+  const getBadgeStyle = () => {
+    if (telemetry.mode === 'backend_connected') {
+      return {
+        color: 'bg-signal-green',
+        text: 'BACKEND LIVE (SQLITE)',
+        textColor: 'text-signal-green'
+      };
+    }
+    if (telemetry.mode === 'edge_direct') {
+      return {
+        color: 'bg-signal-cyan',
+        text: 'DIRECT SENSORS (USGS·NASA·CISA)',
+        textColor: 'text-signal-cyan'
+      };
+    }
+    if (telemetry.mode === 'degraded') {
+      return {
+        color: 'bg-signal-amber',
+        text: 'TELEMETRY DEGRADED',
+        textColor: 'text-signal-amber'
+      };
+    }
+    return {
+      color: 'bg-signal-amber animate-pulse',
+      text: 'CONNECTING...',
+      textColor: 'text-signal-amber'
+    };
+  };
+
+  const badge = getBadgeStyle();
 
   return (
     <header className="absolute top-4 inset-x-6 z-40 flex items-center justify-between pointer-events-none select-none">
@@ -129,21 +170,96 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* 3. Right Status & Refresh Action */}
-      <div className="flex items-center space-x-2 pointer-events-auto">
+      {/* 3. Right Status & Refresh Action with Diagnostic Drawer */}
+      <div className="flex items-center space-x-2 pointer-events-auto relative">
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
           className="command-surface-elevated p-2 rounded-xl text-content-secondary hover:text-signal-cyan transition-colors"
           title="Refresh multi-domain sensor feeds"
+          aria-label="Refresh telemetry feeds"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-signal-cyan' : ''}`} />
         </button>
 
-        <div className="command-surface-elevated px-3 py-2 rounded-xl flex items-center space-x-2 text-xs font-mono text-content-secondary">
-          <span className="w-1.5 h-1.5 rounded-full bg-signal-green" />
-          <span className="hidden md:inline">SENSORS ONLINE</span>
-        </div>
+        {/* Interactive Telemetry Diagnostic Trigger */}
+        <button
+          onClick={() => setShowDiagnostics(!showDiagnostics)}
+          className="command-surface-elevated px-3 py-2 rounded-xl flex items-center space-x-2 text-xs font-mono transition-colors hover:border-surface-border-active cursor-pointer"
+          title="Click to view telemetry ingestion diagnostics"
+          aria-expanded={showDiagnostics}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${badge.color}`} />
+          <span className="hidden md:inline font-medium">{badge.text}</span>
+        </button>
+
+        {/* Telemetry Diagnostics Popover */}
+        {showDiagnostics && (
+          <div className="absolute top-full right-0 mt-2 w-80 command-surface-elevated rounded-2xl p-4 shadow-subtle-surface border border-surface-border text-xs font-mono z-50 animate-fade-in space-y-3">
+            <div className="flex items-center justify-between border-b border-surface-border pb-2">
+              <div className="flex items-center space-x-1.5">
+                <Radio className="w-4 h-4 text-signal-cyan" />
+                <span className="font-semibold text-content-primary uppercase">TELEMETRY DIAGNOSTICS</span>
+              </div>
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="p-1 rounded text-content-muted hover:text-content-primary transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-[11px]">
+              <div className="flex justify-between">
+                <span className="text-content-muted">Pipeline Architecture:</span>
+                <span className="text-content-primary font-semibold">
+                  {telemetry.mode === 'backend_connected' ? 'FastAPI + SQLite Container' : 'High-Availability Direct Edge'}
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-content-muted">Backend Service:</span>
+                <span className={telemetry.isBackendReachable ? 'text-signal-green' : 'text-signal-amber'}>
+                  {telemetry.isBackendReachable ? 'Online & Ingesting' : 'Standalone Edge Mode'}
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-content-muted">Active Ingestion Feeds:</span>
+                <span className="text-signal-cyan font-bold">
+                  USGS (Seismic) · NASA EONET · CISA KEV
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-content-muted">Total Events Cached:</span>
+                <span className="text-content-primary font-bold">
+                  {riskOverview?.total_incidents || telemetry.totalEvents} Incidents
+                </span>
+              </div>
+
+              {telemetry.lastSyncTime && (
+                <div className="flex justify-between border-t border-surface-border/50 pt-1.5">
+                  <span className="text-content-muted">Last Sensor Sweep:</span>
+                  <span className="text-content-secondary">
+                    {telemetry.lastSyncTime.toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                onRefresh();
+                setShowDiagnostics(false);
+              }}
+              className="w-full py-2 rounded-xl bg-signal-cyan/15 hover:bg-signal-cyan/25 border border-signal-cyan/30 text-signal-cyan text-xs font-mono font-medium flex items-center justify-center space-x-1.5 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Force Synchronous Sweep</span>
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );
