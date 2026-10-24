@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { NormalizedEvent } from '../types';
-import { RotateCcw, ZoomIn, ZoomOut, Compass } from 'lucide-react';
+import { WORLD_CONTINENTS } from './worldLandmassData';
+import { clusterEvents, EventCluster } from './clustering';
+import { RotateCcw, ZoomIn, ZoomOut, Layers, Compass } from 'lucide-react';
 
 interface GlobeSceneProps {
   events: NormalizedEvent[];
@@ -23,11 +25,20 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   const globeGroupRef = useRef<THREE.Group | null>(null);
   const markersRef = useRef<THREE.Mesh[]>([]);
   const isInteractingRef = useRef<boolean>(false);
-  const hoveredEventRef = useRef<NormalizedEvent | null>(null);
-  const [hoveredEvent, setHoveredEvent] = useState<NormalizedEvent | null>(null);
+  const hoveredClusterRef = useRef<EventCluster | null>(null);
+  const [hoveredCluster, setHoveredCluster] = useState<EventCluster | null>(null);
   const [webGlAvailable, setWebGlAvailable] = useState<boolean>(true);
+  const [activeLayer, setActiveLayer] = useState<'all' | 'seismic' | 'hazards' | 'weather'>('all');
 
-  // Generate procedural realistic high-fidelity Earth texture
+  // Filter events based on active visual layer
+  const filteredEvents = events.filter(e => {
+    if (activeLayer === 'seismic') return e.category === 'earthquake';
+    if (activeLayer === 'hazards') return e.domain === 'natural_hazard' && e.category !== 'earthquake';
+    if (activeLayer === 'weather') return e.domain === 'weather_extreme';
+    return true;
+  });
+
+  // Generate procedural, clean Earth texture using real continent polygon outlines (ZERO cyan dots!)
   const createEarthTexture = useCallback(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 4096;
@@ -35,63 +46,54 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return new THREE.CanvasTexture(canvas);
 
-    // 1. Deep Oceanic Abyss Gradient
+    // 1. Oceanic Deep Space Abyss Gradient
     const oceanGrad = ctx.createLinearGradient(0, 0, 0, 2048);
-    oceanGrad.addColorStop(0, '#02050D');
-    oceanGrad.addColorStop(0.5, '#050D1C');
-    oceanGrad.addColorStop(1, '#02050D');
+    oceanGrad.addColorStop(0, '#030713');
+    oceanGrad.addColorStop(0.5, '#050E20');
+    oceanGrad.addColorStop(1, '#030713');
     ctx.fillStyle = oceanGrad;
     ctx.fillRect(0, 0, 4096, 2048);
 
     // 2. Graticules (Subtle 30-degree orbital coordinates)
-    ctx.strokeStyle = 'rgba(114, 221, 251, 0.035)';
-    ctx.lineWidth = 1.5;
-    for (let x = 0; x <= 4096; x += 341) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= 4096; x += 341.3) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, 2048);
       ctx.stroke();
     }
-    for (let y = 0; y <= 2048; y += 170) {
+    for (let y = 0; y <= 2048; y += 170.6) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(4096, y);
       ctx.stroke();
     }
 
-    // 3. Procedural Continents Shading with Landmass Clusters
-    // Major continental centroid approximations with density distributions
-    const continentalCenters = [
-      // North America
-      { x: 1100, y: 650, rad: 380, count: 500 },
-      // South America
-      { x: 1450, y: 1350, rad: 320, count: 420 },
-      // Eurasia / Europe
-      { x: 2200, y: 580, rad: 320, count: 480 },
-      // Asia
-      { x: 2900, y: 700, rad: 520, count: 700 },
-      // Africa
-      { x: 2250, y: 1150, rad: 420, count: 550 },
-      // Australia
-      { x: 3350, y: 1450, rad: 260, count: 320 },
-      // Southeast Asia / Maritime
-      { x: 3100, y: 1100, rad: 280, count: 360 }
-    ];
+    // 3. Draw Clean, Recognizable Continent Landmass Polygons (NO NOISY DOTS!)
+    ctx.fillStyle = '#0B1728'; // Deep solid continent slate
+    ctx.strokeStyle = 'rgba(114, 221, 251, 0.45)'; // Hairline cyan coastlines
+    ctx.lineWidth = 1.8;
 
-    ctx.fillStyle = 'rgba(114, 221, 251, 0.16)';
-    continentalCenters.forEach(center => {
-      for (let i = 0; i < center.count; i++) {
-        const u = Math.random() + Math.random();
-        const r = (u > 1 ? 2 - u : u) * center.rad;
-        const theta = Math.random() * Math.PI * 2;
-        const cx = center.x + r * Math.cos(theta);
-        const cy = center.y + r * Math.sin(theta) * 0.85;
-        const pSize = 1.5 + Math.random() * 4.5;
+    WORLD_CONTINENTS.forEach(continent => {
+      if (continent.points.length === 0) return;
+      ctx.beginPath();
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, pSize, 0, Math.PI * 2);
-        ctx.fill();
+      const [firstLon, firstLat] = continent.points[0];
+      const startX = ((firstLon + 180) / 360) * 4096;
+      const startY = ((90 - firstLat) / 180) * 2048;
+      ctx.moveTo(startX, startY);
+
+      for (let i = 1; i < continent.points.length; i++) {
+        const [lon, lat] = continent.points[i];
+        const px = ((lon + 180) / 360) * 4096;
+        const py = ((90 - lat) / 180) * 2048;
+        ctx.lineTo(px, py);
       }
+
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     });
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -104,7 +106,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const container = mountRef.current;
     if (!container) return;
 
-    // Check WebGL support
+    // Check WebGL availability
     try {
       const testCanvas = document.createElement('canvas');
       const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
@@ -125,7 +127,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
-    camera.position.set(0, 15, 255);
+    camera.position.set(0, 10, 250);
     cameraRef.current = camera;
 
     // 2. Renderer
@@ -148,13 +150,13 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
     const globeRadius = 78;
 
-    // 4. Earth Sphere Mesh
+    // 4. Earth Sphere Mesh (Clean vector continent texture)
     const earthTexture = createEarthTexture();
     const globeGeo = new THREE.SphereGeometry(globeRadius, 64, 64);
     const globeMat = new THREE.MeshStandardMaterial({
       map: earthTexture,
-      roughness: 0.82,
-      metalness: 0.15,
+      roughness: 0.85,
+      metalness: 0.1,
       transparent: true,
       opacity: 0.98
     });
@@ -162,7 +164,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     globeGroup.add(globeMesh);
 
     // 5. Atmospheric Rayleigh-like Rim Glow (Custom Shader)
-    const atmosGeo = new THREE.SphereGeometry(globeRadius * 1.075, 64, 64);
+    const atmosGeo = new THREE.SphereGeometry(globeRadius * 1.06, 64, 64);
     const atmosMat = new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
@@ -174,10 +176,8 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       fragmentShader: `
         varying vec3 vNormal;
         void main() {
-          float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.6);
-          // Soft intelligence cyan with faint deep-blue scatter
-          vec3 atmosphereColor = vec3(0.447, 0.867, 0.984);
-          gl_FragColor = vec4(atmosphereColor, 1.0) * intensity * 0.85;
+          float intensity = pow(0.62 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.8);
+          gl_FragColor = vec4(0.447, 0.867, 0.984, 1.0) * intensity * 0.75;
         }
       `,
       blending: THREE.AdditiveBlending,
@@ -187,8 +187,8 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
     globeGroup.add(atmosMesh);
 
-    // 6. Deep Space Background Starfield
-    const starCount = 1200;
+    // 6. Subtle, Restrained Starfield (Low Density)
+    const starCount = 500;
     const starGeo = new THREE.BufferGeometry();
     const starPositions = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount * 3; i += 3) {
@@ -199,9 +199,9 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
     const starMat = new THREE.PointsMaterial({
       color: 0x8D9AAA,
-      size: 1.2,
+      size: 1.1,
       transparent: true,
-      opacity: 0.45
+      opacity: 0.35
     });
     const starField = new THREE.Points(starGeo, starMat);
     scene.add(starField);
@@ -210,11 +210,11 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const ambientLight = new THREE.AmbientLight(0x05070B, 3.2);
     scene.add(ambientLight);
 
-    const keySun = new THREE.DirectionalLight(0xF2F5FA, 2.5);
+    const keySun = new THREE.DirectionalLight(0xF2F5FA, 2.4);
     keySun.position.set(180, 100, 160);
     scene.add(keySun);
 
-    const rimScatter = new THREE.DirectionalLight(0x72DDFB, 1.2);
+    const rimScatter = new THREE.DirectionalLight(0x72DDFB, 1.1);
     rimScatter.position.set(-180, -90, -120);
     scene.add(rimScatter);
 
@@ -230,7 +230,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      // Raycasting for marker hover
       const rect = container.getBoundingClientRect();
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -242,17 +241,25 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         raycaster.setFromCamera(mouse, cameraRef.current);
         const intersects = raycaster.intersectObjects(markersRef.current);
 
-        if (intersects.length > 0) {
-          const hit = intersects[0].object as THREE.Mesh;
-          const ev = hit.userData as NormalizedEvent;
-          if (ev && hoveredEventRef.current?.id !== ev.id) {
-            hoveredEventRef.current = ev;
-            setHoveredEvent(ev);
+        // Filter out back-facing markers (occluded by Earth)
+        const visibleIntersects = intersects.filter(hit => {
+          const worldPos = new THREE.Vector3();
+          hit.object.getWorldPosition(worldPos);
+          const camDir = cameraRef.current!.position.clone().sub(worldPos).normalize();
+          return worldPos.clone().normalize().dot(camDir) > 0.15;
+        });
+
+        if (visibleIntersects.length > 0) {
+          const hit = visibleIntersects[0].object as THREE.Mesh;
+          const cluster = hit.userData as EventCluster;
+          if (cluster && hoveredClusterRef.current?.id !== cluster.id) {
+            hoveredClusterRef.current = cluster;
+            setHoveredCluster(cluster);
             container.style.cursor = 'pointer';
           }
-        } else if (hoveredEventRef.current) {
-          hoveredEventRef.current = null;
-          setHoveredEvent(null);
+        } else if (hoveredClusterRef.current) {
+          hoveredClusterRef.current = null;
+          setHoveredCluster(null);
           container.style.cursor = isDragging ? 'grabbing' : 'grab';
         }
       }
@@ -263,7 +270,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
       globeGroupRef.current.rotation.y += dx * 0.0045;
       globeGroupRef.current.rotation.x += dy * 0.0045;
-      // Clamp pitch rotation to avoid pole flip
       globeGroupRef.current.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, globeGroupRef.current.rotation.x));
 
       prevMouse = { x: e.clientX, y: e.clientY };
@@ -294,11 +300,29 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       raycaster.setFromCamera(mouse, cameraRef.current);
       const intersects = raycaster.intersectObjects(markersRef.current);
 
-      if (intersects.length > 0) {
-        const hit = intersects[0].object as THREE.Mesh;
-        const ev = hit.userData as NormalizedEvent;
-        if (ev) {
-          onSelectEvent(ev);
+      const visibleIntersects = intersects.filter(hit => {
+        const worldPos = new THREE.Vector3();
+        hit.object.getWorldPosition(worldPos);
+        const camDir = cameraRef.current!.position.clone().sub(worldPos).normalize();
+        return worldPos.clone().normalize().dot(camDir) > 0.15;
+      });
+
+      if (visibleIntersects.length > 0) {
+        const hit = visibleIntersects[0].object as THREE.Mesh;
+        const cluster = hit.userData as EventCluster;
+        if (cluster) {
+          if (cluster.isCluster) {
+            // Zoom closer to unpack cluster
+            if (cameraRef.current && globeGroupRef.current) {
+              const phi = (cluster.latitude * Math.PI) / 180;
+              const theta = (-cluster.longitude * Math.PI) / 180;
+              globeGroupRef.current.rotation.x = phi;
+              globeGroupRef.current.rotation.y = theta - Math.PI / 2;
+              cameraRef.current.position.z = Math.max(140, cameraRef.current.position.z - 40);
+            }
+          }
+          // Select primary event to inspect details
+          onSelectEvent(cluster.primaryEvent);
         }
       }
     };
@@ -325,7 +349,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const animate = () => {
       animId = requestAnimationFrame(animate);
 
-      // Idle planet spin when untouched
       if (globeGroupRef.current && !isInteractingRef.current) {
         globeGroupRef.current.rotation.y += idleRotationSpeed;
       }
@@ -357,7 +380,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     };
   }, [createEarthTexture, onSelectEvent]);
 
-  // Update Glowing Incident Markers
+  // Update Spatial Event Markers with Clustering (Compact, Category-specific, No Giant White Discs)
   useEffect(() => {
     if (!globeGroupRef.current) return;
     const globeGroup = globeGroupRef.current;
@@ -376,58 +399,76 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
     const globeRadius = 78;
 
-    events.forEach(ev => {
-      if (ev.latitude === null || ev.latitude === undefined || ev.longitude === null || ev.longitude === undefined) {
-        return;
-      }
+    // Cluster geographically overlapping events
+    const clusters = clusterEvents(filteredEvents, 3.5);
 
-      const lat = ev.latitude;
-      const lon = ev.longitude;
+    clusters.forEach(cluster => {
+      const lat = cluster.latitude;
+      const lon = cluster.longitude;
 
-      // WGS84 to Cartesian Spherical
+      // Coordinate to 3D Cartesian
       const phi = (90 - lat) * (Math.PI / 180);
       const theta = (lon + 180) * (Math.PI / 180);
-      const r = globeRadius * 1.018;
+      const r = globeRadius * 1.008;
 
       const x = -(r * Math.sin(phi) * Math.cos(theta));
       const z = (r * Math.sin(phi) * Math.sin(theta));
       const y = (r * Math.cos(phi));
 
-      // Restrained Semantic Colors
-      let colorHex = 0xA5C4D4; // Ice Low
-      if (ev.severity === 'critical') colorHex = 0xFF626B; // Critical Red
-      else if (ev.severity === 'high') colorHex = 0xFFBD69; // Signal Amber
-      else if (ev.severity === 'medium') colorHex = 0x72DDFB; // Intelligence Cyan
+      // Semantic Color Palette
+      let colorHex = 0x8D9AAA; // Neutral slate
+      if (cluster.highestSeverity === 'critical') colorHex = 0xFF626B; // Critical Red
+      else if (cluster.highestSeverity === 'high') colorHex = 0xFFBD69; // Signal Amber
+      else if (cluster.highestSeverity === 'medium') colorHex = 0x72DDFB; // Intelligence Cyan
 
-      const isSelected = selectedEvent?.id === ev.id;
-      const pinRadius = isSelected ? 2.8 : Math.max(1.4, Math.min(2.4, 1.2 + ev.calculated_risk_score / 60));
+      const isSelected = selectedEvent && cluster.events.some(e => e.id === selectedEvent.id);
 
-      const pinGeo = new THREE.SphereGeometry(pinRadius, 16, 16);
+      // Create Category-Specific Compact Geometry
+      let pinGeo: THREE.BufferGeometry;
+      const baseRadius = isSelected ? 2.2 : (cluster.isCluster ? 2.0 : 1.4);
+
+      if (cluster.primaryEvent.category === 'earthquake') {
+        // Seismic diamond (octahedron)
+        pinGeo = new THREE.OctahedronGeometry(baseRadius, 0);
+      } else if (cluster.dominantDomain === 'weather_extreme') {
+        // Atmospheric vortex ring
+        pinGeo = new THREE.TorusGeometry(baseRadius, 0.35, 8, 16);
+      } else {
+        // Compact sphere beacon
+        pinGeo = new THREE.SphereGeometry(baseRadius, 12, 12);
+      }
+
       const pinMat = new THREE.MeshBasicMaterial({
-        color: colorHex
+        color: colorHex,
+        depthTest: true,
+        depthWrite: false
       });
       const pinMesh = new THREE.Mesh(pinGeo, pinMat);
       pinMesh.position.set(x, y, z);
-      pinMesh.userData = ev;
+      pinMesh.userData = cluster;
 
-      // Perpendicular Orbital Halo Ring
-      const haloGeo = new THREE.RingGeometry(pinRadius * 1.2, pinRadius * 2.2, 24);
+      // Look toward Earth radius for perpendicular orientation
+      pinMesh.lookAt(new THREE.Vector3(x * 2, y * 2, z * 2));
+
+      // Add a single crisp hairline halo ring
+      const haloGeo = new THREE.RingGeometry(baseRadius * 1.15, baseRadius * 1.5, 16);
       const haloMat = new THREE.MeshBasicMaterial({
         color: colorHex,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: isSelected ? 0.8 : 0.45
+        opacity: isSelected ? 0.8 : 0.35,
+        depthTest: true,
+        depthWrite: false
       });
       const haloMesh = new THREE.Mesh(haloGeo, haloMat);
-      haloMesh.lookAt(new THREE.Vector3(0, 0, 0));
       pinMesh.add(haloMesh);
 
       globeGroup.add(pinMesh);
       markersRef.current.push(pinMesh);
     });
-  }, [events, selectedEvent]);
+  }, [filteredEvents, selectedEvent]);
 
-  // Selected Event Coordinate Orientation
+  // Selected Event Orientation (Only when lat/lon are valid coordinates)
   useEffect(() => {
     if (!selectedEvent || selectedEvent.latitude === null || selectedEvent.latitude === undefined || selectedEvent.longitude === null || selectedEvent.longitude === undefined) return;
     if (!globeGroupRef.current) return;
@@ -443,12 +484,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     isInteractingRef.current = true;
     setTimeout(() => {
       isInteractingRef.current = false;
-    }, 2500);
+    }, 2000);
   }, [selectedEvent]);
 
   const handleResetCamera = () => {
     if (cameraRef.current) {
-      cameraRef.current.position.set(0, 15, 255);
+      cameraRef.current.position.set(0, 10, 250);
     }
     if (globeGroupRef.current) {
       globeGroupRef.current.rotation.set(0, 0, 0);
@@ -467,7 +508,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         <Compass className="w-12 h-12 text-content-muted mb-3" />
         <h3 className="text-sm font-semibold text-content-primary">Planetary Visualization Unavailable</h3>
         <p className="text-xs text-content-secondary max-w-sm mt-1">
-          Hardware WebGL acceleration is disabled or unsupported. Please use the high-contrast data stream on the left.
+          Hardware WebGL acceleration is disabled or unsupported. Please use the intelligence feed below.
         </p>
       </div>
     );
@@ -478,50 +519,86 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
       {/* Floating In-Scene Hover Tooltip */}
-      {hoveredEvent && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-150">
-          <div className="command-surface-elevated px-3 py-1.5 rounded-lg flex items-center space-x-2 text-xs font-mono shadow-subtle-surface">
+      {hoveredCluster && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-150 z-30">
+          <div className="command-surface-elevated px-3 py-1.5 rounded-xl flex items-center space-x-2 text-xs font-mono shadow-subtle-surface">
             <span className={`w-2 h-2 rounded-full ${
-              hoveredEvent.severity === 'critical' ? 'bg-signal-red' :
-              hoveredEvent.severity === 'high' ? 'bg-signal-amber' : 'bg-signal-cyan'
+              hoveredCluster.highestSeverity === 'critical' ? 'bg-signal-red' :
+              hoveredCluster.highestSeverity === 'high' ? 'bg-signal-amber' : 'bg-signal-cyan'
             }`} />
-            <span className="text-content-primary font-medium">{hoveredEvent.title}</span>
+            <span className="text-content-primary font-medium">
+              {hoveredCluster.isCluster 
+                ? `${hoveredCluster.clusterCount} Incidents Clustered (${hoveredCluster.primaryEvent.region || 'Regional Sector'})`
+                : hoveredCluster.primaryEvent.title}
+            </span>
             <span className="text-content-muted">|</span>
-            <span className="text-content-secondary font-mono">RISK: {hoveredEvent.calculated_risk_score}</span>
+            <span className="text-content-secondary font-mono">RISK: {hoveredCluster.highestRiskScore}</span>
           </div>
         </div>
       )}
 
-      {/* Spatial Camera & Reset Controls */}
-      <div className="absolute bottom-6 right-6 flex items-center space-x-1.5 command-surface p-1 rounded-lg">
-        <button
-          onClick={() => handleZoom(-30)}
-          className="p-1.5 rounded hover:bg-surface-subtle text-content-secondary hover:text-content-primary transition-colors"
-          title="Zoom In"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => handleZoom(30)}
-          className="p-1.5 rounded hover:bg-surface-subtle text-content-secondary hover:text-content-primary transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <div className="w-[1px] h-4 bg-surface-border mx-0.5" />
-        <button
-          onClick={handleResetCamera}
-          className="p-1.5 rounded hover:bg-surface-subtle text-content-secondary hover:text-signal-cyan transition-colors"
-          title="Reset View"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
-      </div>
+      {/* Layer Control Pill & Zoom Actions */}
+      <div className="absolute bottom-24 right-6 flex items-center space-x-2 z-30">
+        <div className="command-surface-elevated p-1 rounded-xl flex items-center space-x-1 shadow-subtle-surface">
+          <button
+            onClick={() => setActiveLayer('all')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-colors ${
+              activeLayer === 'all' ? 'bg-signal-cyan/20 text-signal-cyan font-semibold' : 'text-content-muted hover:text-content-primary'
+            }`}
+          >
+            All Layers
+          </button>
+          <button
+            onClick={() => setActiveLayer('seismic')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-colors ${
+              activeLayer === 'seismic' ? 'bg-signal-cyan/20 text-signal-cyan font-semibold' : 'text-content-muted hover:text-content-primary'
+            }`}
+          >
+            Seismic (USGS)
+          </button>
+          <button
+            onClick={() => setActiveLayer('hazards')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-colors ${
+              activeLayer === 'hazards' ? 'bg-signal-cyan/20 text-signal-cyan font-semibold' : 'text-content-muted hover:text-content-primary'
+            }`}
+          >
+            Hazards (EONET)
+          </button>
+          <button
+            onClick={() => setActiveLayer('weather')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-colors ${
+              activeLayer === 'weather' ? 'bg-signal-cyan/20 text-signal-cyan font-semibold' : 'text-content-muted hover:text-content-primary'
+            }`}
+          >
+            Corridors (Weather)
+          </button>
+        </div>
 
-      {/* Coordinate Telemetry (Restrained) */}
-      <div className="absolute bottom-6 left-6 pointer-events-none text-[11px] font-mono text-content-muted">
-        <div>WGS84 // RAYLEIGH LIMB SCATTER ACTIVE</div>
-        <div>REAL-TIME SENSOR FUSION</div>
+        {/* Zoom & Reset Controls */}
+        <div className="command-surface-elevated p-1 rounded-xl flex items-center space-x-1 shadow-subtle-surface">
+          <button
+            onClick={() => handleZoom(-30)}
+            className="p-1.5 rounded-lg hover:bg-surface-subtle text-content-secondary hover:text-content-primary transition-colors"
+            title="Zoom In"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleZoom(30)}
+            className="p-1.5 rounded-lg hover:bg-surface-subtle text-content-secondary hover:text-content-primary transition-colors"
+            title="Zoom Out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <div className="w-[1px] h-4 bg-surface-border mx-0.5" />
+          <button
+            onClick={handleResetCamera}
+            className="p-1.5 rounded-lg hover:bg-surface-subtle text-content-secondary hover:text-signal-cyan transition-colors"
+            title="Reset Planetary View"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
