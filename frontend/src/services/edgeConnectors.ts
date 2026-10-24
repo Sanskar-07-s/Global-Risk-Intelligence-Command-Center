@@ -1,17 +1,80 @@
-import { NormalizedEvent, RiskOverview, SourceHealth } from '../types';
+import { NormalizedEvent, RiskOverview, SourceHealth, RiskDomain, SeverityLevel } from '../types';
 
 /**
  * Direct Edge Sensor Ingestion for Production Standalone Environments.
  * When the FastAPI backend container is not reachable (e.g. Firebase Hosting SPA mode),
  * this service directly connects to verified, CORS-enabled public feeds:
- * 1. USGS Earthquake Hazards Program (GeoJSON)
- * 2. NASA Earth Observatory Natural Event Tracker - EONET (v3)
- * 3. CISA Known Exploited Vulnerabilities Catalog (KEV JSON)
+ * 1. USGS Earthquake Hazards Program (GeoJSON) - Open CORS
+ * 2. NASA Earth Observatory Natural Event Tracker - EONET (v3) - Open CORS
+ * 3. CISA Known Exploited Vulnerabilities Catalog (KEV JSON) - Served via same-origin /data/cisa_kev.json
  * 
  * Normalization formulas and risk weightings are 100% identical to backend connectors.
  */
 
-// Helper to calculate composite risk overview
+// Strict runtime sanitizer to guarantee all properties are present and safe
+export function sanitizeNormalizedEvent(raw: any): NormalizedEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const id = String(raw.id || `ev_${Date.now()}_${Math.random().toString(36).substring(7)}`);
+  const title = String(raw.title || 'Situational Incident');
+  const domain = (raw.domain || 'natural_hazard') as RiskDomain;
+  // Guarantee category is a non-empty string so downstream never crashes on .category
+  const category = String(raw.category || 'uncategorized');
+  const severity = (['critical', 'high', 'medium', 'low', 'info'].includes(raw.severity)
+    ? raw.severity
+    : 'low') as SeverityLevel;
+
+  const score = typeof raw.calculated_risk_score === 'number' && !isNaN(raw.calculated_risk_score)
+    ? Math.max(0, Math.min(100, Math.round(raw.calculated_risk_score * 10) / 10))
+    : 25.0;
+
+  let lat: number | null = null;
+  let lon: number | null = null;
+  if (raw.latitude !== null && raw.latitude !== undefined && !isNaN(Number(raw.latitude))) {
+    lat = Number(raw.latitude);
+  }
+  if (raw.longitude !== null && raw.longitude !== undefined && !isNaN(Number(raw.longitude))) {
+    lon = Number(raw.longitude);
+  }
+
+  let depth: number | null = null;
+  if (raw.depth_or_elevation !== null && raw.depth_or_elevation !== undefined && !isNaN(Number(raw.depth_or_elevation))) {
+    depth = Number(raw.depth_or_elevation);
+  }
+
+  return {
+    id,
+    source: String(raw.source || 'unknown'),
+    source_id: raw.source_id ? String(raw.source_id) : undefined,
+    source_url: raw.source_url ? String(raw.source_url) : undefined,
+    title,
+    description: raw.description ? String(raw.description) : undefined,
+    domain,
+    category,
+    latitude: lat,
+    longitude: lon,
+    depth_or_elevation: depth,
+    country: raw.country ? String(raw.country) : undefined,
+    region: raw.region ? String(raw.region) : undefined,
+    severity,
+    calculated_risk_score: score,
+    confidence: typeof raw.confidence === 'number' ? raw.confidence : 0.85,
+    scoring_version: String(raw.scoring_version || '1.0.0-edge'),
+    score_breakdown: raw.score_breakdown || {
+      severity_component: Math.round(score * 0.45 * 10) / 10,
+      exposure_component: Math.round(score * 0.35 * 10) / 10,
+      vulnerability_component: Math.round(score * 0.20 * 10) / 10
+    },
+    occurrence_time: raw.occurrence_time || new Date().toISOString(),
+    observation_time: raw.observation_time || new Date().toISOString(),
+    first_seen_time: raw.first_seen_time || new Date().toISOString(),
+    last_updated_time: raw.last_updated_time || new Date().toISOString(),
+    verification_status: raw.verification_status || 'verified',
+    raw_payload: raw.raw_payload || {}
+  };
+}
+
+// Helper to calculate composite risk overview safely
 export function calculateRiskOverview(events: NormalizedEvent[]): RiskOverview {
   let criticalCount = 0;
   let highCount = 0;
@@ -19,16 +82,20 @@ export function calculateRiskOverview(events: NormalizedEvent[]): RiskOverview {
   const severityBreakdown: Record<string, number> = {};
   let totalScore = 0;
 
-  events.forEach(ev => {
-    domainBreakdown[ev.domain] = (domainBreakdown[ev.domain] || 0) + 1;
-    severityBreakdown[ev.severity] = (severityBreakdown[ev.severity] || 0) + 1;
-    totalScore += ev.calculated_risk_score;
+  const validEvents = (events || []).filter(e => Boolean(e && typeof e === 'object'));
 
-    if (ev.severity === 'critical') criticalCount++;
-    if (ev.severity === 'high') highCount++;
+  validEvents.forEach(ev => {
+    const d = ev.domain || 'natural_hazard';
+    const s = ev.severity || 'low';
+    domainBreakdown[d] = (domainBreakdown[d] || 0) + 1;
+    severityBreakdown[s] = (severityBreakdown[s] || 0) + 1;
+    totalScore += (ev.calculated_risk_score || 0);
+
+    if (s === 'critical') criticalCount++;
+    if (s === 'high') highCount++;
   });
 
-  const avgRisk = events.length > 0 ? totalScore / events.length : 0;
+  const avgRisk = validEvents.length > 0 ? totalScore / validEvents.length : 0;
   let threatLevel = 'ELEVATED';
   if (avgRisk >= 75) threatLevel = 'CRITICAL';
   else if (avgRisk >= 50) threatLevel = 'ELEVATED';
@@ -38,7 +105,7 @@ export function calculateRiskOverview(events: NormalizedEvent[]): RiskOverview {
   return {
     global_composite_risk: Math.round(avgRisk * 10) / 10,
     threat_level: threatLevel,
-    total_incidents: events.length,
+    total_incidents: validEvents.length,
     critical_count: criticalCount,
     high_count: highCount,
     domain_breakdown: domainBreakdown,
@@ -46,7 +113,7 @@ export function calculateRiskOverview(events: NormalizedEvent[]): RiskOverview {
   };
 }
 
-// 1. Direct USGS Earthquake Ingestion
+// 1. Direct USGS Earthquake Ingestion (Open CORS)
 export async function fetchUSGSEvents(): Promise<{ events: NormalizedEvent[]; latency: number }> {
   const start = performance.now();
   const url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson';
@@ -56,17 +123,20 @@ export async function fetchUSGSEvents(): Promise<{ events: NormalizedEvent[]; la
   const data = await res.json();
   const latency = Math.round(performance.now() - start);
 
-  const features = data.features || [];
-  const events: NormalizedEvent[] = features.map((feat: any) => {
+  const features = data?.features || [];
+  const events: NormalizedEvent[] = [];
+
+  for (const feat of features) {
+    if (!feat || typeof feat !== 'object') continue;
     const props = feat.properties || {};
     const geom = feat.geometry || {};
     const coords = geom.coordinates || [0, 0, 0];
 
-    const lon = coords[0] !== undefined ? coords[0] : null;
-    const lat = coords[1] !== undefined ? coords[1] : null;
-    const depth = coords[2] !== undefined ? coords[2] : null;
+    const lon = (coords[0] !== undefined && !isNaN(Number(coords[0]))) ? Number(coords[0]) : null;
+    const lat = (coords[1] !== undefined && !isNaN(Number(coords[1]))) ? Number(coords[1]) : null;
+    const depth = (coords[2] !== undefined && !isNaN(Number(coords[2]))) ? Number(coords[2]) : null;
 
-    const mag = props.mag || 0.0;
+    const mag = typeof props.mag === 'number' ? props.mag : 0.0;
     const place = props.place || 'Unknown Region';
     const timeMs = props.time;
     const occTime = timeMs ? new Date(timeMs).toISOString() : new Date().toISOString();
@@ -93,7 +163,7 @@ export async function fetchUSGSEvents(): Promise<{ events: NormalizedEvent[]; la
       riskScore = Math.min(100.0, riskScore + 10.0);
     }
 
-    return {
+    const sanitized = sanitizeNormalizedEvent({
       id: eventId,
       source: 'usgs',
       source_id: feat.id,
@@ -123,13 +193,15 @@ export async function fetchUSGSEvents(): Promise<{ events: NormalizedEvent[]; la
       last_updated_time: new Date().toISOString(),
       verification_status: 'verified',
       raw_payload: props
-    };
-  });
+    });
+
+    if (sanitized) events.push(sanitized);
+  }
 
   return { events, latency };
 }
 
-// 2. Direct NASA EONET Natural Hazard Ingestion
+// 2. Direct NASA EONET Natural Hazard Ingestion (Open CORS)
 export async function fetchEONETEvents(): Promise<{ events: NormalizedEvent[]; latency: number }> {
   const start = performance.now();
   const url = 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=40';
@@ -139,29 +211,30 @@ export async function fetchEONETEvents(): Promise<{ events: NormalizedEvent[]; l
   const data = await res.json();
   const latency = Math.round(performance.now() - start);
 
-  const rawEvents = data.events || [];
+  const rawEvents = data?.events || [];
   const events: NormalizedEvent[] = [];
 
   for (const item of rawEvents) {
+    if (!item || typeof item !== 'object') continue;
     const evId = item.id || 'unknown';
     const title = item.title || 'Natural Event';
-    const categories = item.categories || [];
+    const categories = Array.isArray(item.categories) ? item.categories : [];
     const catName = categories[0]?.title || 'Hazard';
-    const catSlug = catName.toLowerCase().replace(/\s+/g, '_');
+    const catSlug = (catName || 'Hazard').toLowerCase().replace(/\s+/g, '_');
 
-    const geometry = item.geometry || [];
+    const geometry = Array.isArray(item.geometry) ? item.geometry : [];
     let lat: number | null = null;
     let lon: number | null = null;
     let occTime = new Date().toISOString();
 
     if (geometry.length > 0) {
       const latest = geometry[geometry.length - 1];
-      const coords = latest.coordinates || [];
-      if (coords.length >= 2) {
+      const coords = latest?.coordinates || [];
+      if (coords.length >= 2 && !isNaN(Number(coords[0])) && !isNaN(Number(coords[1]))) {
         lon = Number(coords[0]);
         lat = Number(coords[1]);
       }
-      if (latest.date) {
+      if (latest?.date) {
         occTime = new Date(latest.date).toISOString();
       }
     }
@@ -178,10 +251,10 @@ export async function fetchEONETEvents(): Promise<{ events: NormalizedEvent[]; l
       riskScore = 85.0;
     }
 
-    const sources = item.sources || [];
+    const sources = Array.isArray(item.sources) ? item.sources : [];
     const sourceUrl = sources[0]?.url || `https://eonet.gsfc.nasa.gov/`;
 
-    events.push({
+    const sanitized = sanitizeNormalizedEvent({
       id: `eonet:${evId}`,
       source: 'eonet',
       source_id: evId,
@@ -189,7 +262,7 @@ export async function fetchEONETEvents(): Promise<{ events: NormalizedEvent[]; l
       title: title,
       description: `NASA EONET active ${catName}: ${title}. Geometry tracking active.`,
       domain: catSlug.includes('storm') || catSlug.includes('cyclone') ? 'weather_extreme' : 'natural_hazard',
-      category: catSlug,
+      category: catSlug || 'natural_hazard',
       latitude: lat,
       longitude: lon,
       region: catName,
@@ -209,26 +282,40 @@ export async function fetchEONETEvents(): Promise<{ events: NormalizedEvent[]; l
       verification_status: 'verified',
       raw_payload: item
     });
+
+    if (sanitized) events.push(sanitized);
   }
 
   return { events, latency };
 }
 
-// 3. Direct CISA KEV Vulnerability Ingestion
+// 3. Direct CISA KEV Vulnerability Ingestion (CORS Safe via Same-Origin Catalog)
 export async function fetchCISAKEVEvents(): Promise<{ events: NormalizedEvent[]; latency: number }> {
   const start = performance.now();
-  const url = 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json';
   
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`CISA HTTP ${res.status}`);
+  // Browsers block direct cross-origin fetches to cisa.gov because cisa.gov does not send Access-Control headers.
+  // We therefore load the same-origin verified catalog at /data/cisa_kev.json, with fallback to upstream.
+  let res: Response;
+  try {
+    res = await fetch('/data/cisa_kev.json');
+    if (!res.ok) throw new Error(`Local KEV catalog HTTP ${res.status}`);
+  } catch {
+    const upstreamUrl = 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json';
+    res = await fetch(upstreamUrl);
+    if (!res.ok) throw new Error(`CISA HTTP ${res.status}`);
+  }
+
   const data = await res.json();
   const latency = Math.round(performance.now() - start);
 
-  const vulns = data.vulnerabilities || [];
+  const vulns = Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : [];
   // Take the most recent 35 weaponized vulnerabilities
   const recent = vulns.slice(-35);
 
-  const events: NormalizedEvent[] = recent.map((item: any) => {
+  const events: NormalizedEvent[] = [];
+
+  for (const item of recent) {
+    if (!item || typeof item !== 'object') continue;
     const cveId = item.cveID || 'CVE-UNKNOWN';
     const vendor = item.vendorProject || 'Unknown Vendor';
     const product = item.product || 'Unknown Product';
@@ -253,7 +340,7 @@ export async function fetchCISAKEVEvents(): Promise<{ events: NormalizedEvent[];
     const riskScore = isCritical ? 92.0 : 78.0;
     const sev: 'critical' | 'high' = isCritical ? 'critical' : 'high';
 
-    return {
+    const sanitized = sanitizeNormalizedEvent({
       id: `cisa:${cveId}`,
       source: 'cisa_kev',
       source_id: cveId,
@@ -283,8 +370,10 @@ export async function fetchCISAKEVEvents(): Promise<{ events: NormalizedEvent[];
       last_updated_time: new Date().toISOString(),
       verification_status: 'verified',
       raw_payload: { vendor, product, action, cveID: cveId, shortDescription: desc }
-    };
-  });
+    });
+
+    if (sanitized) events.push(sanitized);
+  }
 
   return { events, latency };
 }

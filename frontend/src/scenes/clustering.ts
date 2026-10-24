@@ -17,25 +17,34 @@ export function clusterEvents(
   events: NormalizedEvent[],
   thresholdDeg: number = 3.5
 ): EventCluster[] {
-  // Only cluster events that actually have valid coordinates
+  if (!Array.isArray(events) || events.length === 0) return [];
+
+  // Filter out any undefined, null, or malformed events, or events without coordinates
   const geoEvents = events.filter(
-    e => e.latitude !== null && e.latitude !== undefined &&
-         e.longitude !== null && e.longitude !== undefined
+    (e): e is NormalizedEvent =>
+      Boolean(
+        e && typeof e === 'object' &&
+        e.id &&
+        e.latitude !== null && e.latitude !== undefined && !isNaN(Number(e.latitude)) &&
+        e.longitude !== null && e.longitude !== undefined && !isNaN(Number(e.longitude))
+      )
   );
+
+  if (geoEvents.length === 0) return [];
 
   const clusters: EventCluster[] = [];
   const visited = new Set<string>();
 
   for (let i = 0; i < geoEvents.length; i++) {
     const ev1 = geoEvents[i];
-    if (visited.has(ev1.id)) continue;
+    if (!ev1 || visited.has(ev1.id)) continue;
 
     visited.add(ev1.id);
     const clusterMembers: NormalizedEvent[] = [ev1];
 
     for (let j = i + 1; j < geoEvents.length; j++) {
       const ev2 = geoEvents[j];
-      if (visited.has(ev2.id)) continue;
+      if (!ev2 || visited.has(ev2.id)) continue;
 
       const dLat = Math.abs((ev1.latitude ?? 0) - (ev2.latitude ?? 0));
       let dLon = Math.abs((ev1.longitude ?? 0) - (ev2.longitude ?? 0));
@@ -48,8 +57,10 @@ export function clusterEvents(
       }
     }
 
+    if (clusterMembers.length === 0) continue;
+
     // Determine highest severity
-    let highestSeverity = 'low';
+    let highestSeverity = ev1.severity || 'low';
     const severityRanks: Record<string, number> = {
       critical: 4,
       high: 3,
@@ -58,15 +69,16 @@ export function clusterEvents(
       info: 0
     };
 
-    let maxScore = 0;
-    let primary = clusterMembers[0];
+    let maxScore = ev1.calculated_risk_score || 0;
+    let primary: NormalizedEvent = ev1;
 
     clusterMembers.forEach(m => {
+      if (!m) return;
       const rank = severityRanks[m.severity] || 1;
       if (rank > (severityRanks[highestSeverity] || 1)) {
         highestSeverity = m.severity;
       }
-      if (m.calculated_risk_score > maxScore) {
+      if ((m.calculated_risk_score || 0) > maxScore) {
         maxScore = m.calculated_risk_score;
         primary = m;
       }
@@ -85,7 +97,7 @@ export function clusterEvents(
       longitude: centroidLon,
       highestSeverity,
       highestRiskScore: maxScore,
-      dominantDomain: primary.domain,
+      dominantDomain: primary.domain || 'natural_hazard',
       events: clusterMembers,
       clusterCount: clusterMembers.length,
       primaryEvent: primary

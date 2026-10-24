@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     PORT: int = 8000
     HOST: str = "0.0.0.0"
-    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,https://g-r-i-c-c.web.app,https://g-r-i-c-c.firebaseapp.com"
     DATABASE_URL: str = "sqlite:///./data/gricc.db"
     SECRET_KEY: str = "gricc-default-secret-key-change-in-production"
 

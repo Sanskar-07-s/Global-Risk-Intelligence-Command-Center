@@ -11,6 +11,7 @@ import { DataHealth } from './features/data-health/DataHealth';
 import { CaseManagement } from './features/cases/CaseManagement';
 import { api } from './services/api';
 import { NormalizedEvent, RiskOverview } from './types';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export const App: React.FC = () => {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>('operations');
@@ -109,62 +110,64 @@ export const App: React.FC = () => {
 
       {/* 3. Primary Full-Viewport Spatial Workspace Container */}
       <main className="w-full h-full relative overflow-hidden">
-        {activeWorkspace === 'operations' && (
-          <OperationsCenter
-            events={events}
-            selectedEvent={selectedEvent}
-            onSelectEvent={(ev) => setSelectedEvent(ev)}
-            onPinEventToCase={handlePinEventToCase}
-            onLaunchScenario={handleLaunchScenario}
-            onAskAI={(q) => {
-              handleExecuteCommand(q);
-              setActiveWorkspace('ai-desk');
-            }}
-          />
-        )}
+        <ErrorBoundary fallbackTitle="Active Intelligence Workspace Anomaly" onReset={refreshTelemetry}>
+          {activeWorkspace === 'operations' && (
+            <OperationsCenter
+              events={events}
+              selectedEvent={selectedEvent}
+              onSelectEvent={(ev) => setSelectedEvent(ev)}
+              onPinEventToCase={handlePinEventToCase}
+              onLaunchScenario={handleLaunchScenario}
+              onAskAI={(q) => {
+                handleExecuteCommand(q);
+                setActiveWorkspace('ai-desk');
+              }}
+            />
+          )}
 
-        {activeWorkspace === 'threats' && (
-          <ThreatIntelligence
-            events={events}
-            onSelectEvent={(ev) => {
-              setSelectedEvent(ev);
-              setActiveWorkspace('operations');
-            }}
-          />
-        )}
+          {activeWorkspace === 'threats' && (
+            <ThreatIntelligence
+              events={events}
+              onSelectEvent={(ev) => {
+                setSelectedEvent(ev);
+                setActiveWorkspace('operations');
+              }}
+            />
+          )}
 
-        {activeWorkspace === 'knowledge-graph' && (
-          <KnowledgeGraph
-            events={events}
-            onSelectEvent={(ev) => {
-              setSelectedEvent(ev);
-              setActiveWorkspace('operations');
-            }}
-          />
-        )}
+          {activeWorkspace === 'knowledge-graph' && (
+            <KnowledgeGraph
+              events={events}
+              onSelectEvent={(ev) => {
+                setSelectedEvent(ev);
+                setActiveWorkspace('operations');
+              }}
+            />
+          )}
 
-        {activeWorkspace === 'analytics' && (
-          <RiskAnalytics
-            events={events}
-            riskOverview={riskOverview}
-          />
-        )}
+          {activeWorkspace === 'analytics' && (
+            <RiskAnalytics
+              events={events}
+              riskOverview={riskOverview}
+            />
+          )}
 
-        {activeWorkspace === 'scenarios' && (
-          <ScenarioLaboratory />
-        )}
+          {activeWorkspace === 'scenarios' && (
+            <ScenarioLaboratory />
+          )}
 
-        {activeWorkspace === 'ai-desk' && (
-          <AIDesk />
-        )}
+          {activeWorkspace === 'ai-desk' && (
+            <AIDesk />
+          )}
 
-        {activeWorkspace === 'data-health' && (
-          <DataHealth />
-        )}
+          {activeWorkspace === 'data-health' && (
+            <DataHealth />
+          )}
 
-        {activeWorkspace === 'cases' && (
-          <CaseManagement events={events} />
-        )}
+          {activeWorkspace === 'cases' && (
+            <CaseManagement events={events} />
+          )}
+        </ErrorBoundary>
       </main>
     </div>
   );

@@ -25,7 +25,7 @@ interface GlobeSceneProps {
 }
 
 export const GlobeScene: React.FC<GlobeSceneProps> = ({
-  events,
+  events = [],
   selectedEvent,
   onSelectEvent,
   onResetView
@@ -45,11 +45,14 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   const [webGlAvailable, setWebGlAvailable] = useState<boolean>(true);
   const [textureLoaded, setTextureLoaded] = useState<boolean>(false);
 
-  // Filter events based on active layer
-  const filteredEvents = events.filter(e => {
-    if (activeLayer === 'seismic') return e.category === 'earthquake' || e.domain === 'natural_hazard';
-    if (activeLayer === 'hazards') return e.domain === 'natural_hazard';
-    if (activeLayer === 'weather') return e.domain === 'weather_extreme';
+  // Filter events based on active layer safely
+  const filteredEvents = (events || []).filter(e => {
+    if (!e || typeof e !== 'object') return false;
+    const cat = String(e.category || '').toLowerCase();
+    const dom = String(e.domain || '').toLowerCase();
+    if (activeLayer === 'seismic') return cat === 'earthquake' || dom === 'natural_hazard';
+    if (activeLayer === 'hazards') return dom === 'natural_hazard';
+    if (activeLayer === 'weather') return dom === 'weather_extreme';
     return true;
   });
 
@@ -71,8 +74,8 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       return;
     }
 
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 600;
 
     // 1. Scene & Camera
     const scene = new THREE.Scene();
@@ -89,7 +92,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       powerPreference: 'high-performance'
     });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     container.appendChild(renderer.domElement);
@@ -379,7 +382,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       container.removeEventListener('click', onClick);
       window.removeEventListener('resize', handleResize);
 
-      if (rendererRef.current && rendererRef.current.domElement) {
+      if (rendererRef.current && rendererRef.current.domElement && container.contains(rendererRef.current.domElement)) {
         container.removeChild(rendererRef.current.domElement);
         rendererRef.current.dispose();
       }
@@ -417,8 +420,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const clusters = clusterEvents(filteredEvents, 3.5);
 
     clusters.forEach(cluster => {
+      if (!cluster || !cluster.primaryEvent) return;
+
       const lat = cluster.latitude;
       const lon = cluster.longitude;
+
+      if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
 
       // Coordinate to 3D Cartesian coordinates (aligned with equirectangular map UV standard)
       const phi = (90 - lat) * (Math.PI / 180);
@@ -436,16 +443,19 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       else if (cluster.highestSeverity === 'high') colorHex = 0xF59E0B; // Signal Amber
       else if (cluster.highestSeverity === 'medium') colorHex = 0x06B6D4; // Cyan
 
-      const isSelected = selectedEvent && cluster.events.some(e => e.id === selectedEvent.id);
+      const isSelected = selectedEvent && cluster.events.some(e => e?.id === selectedEvent.id);
 
       // Category-Specific Compact 3D Geometry
       let pinGeo: THREE.BufferGeometry;
       const baseRadius = isSelected ? 2.1 : (cluster.isCluster ? 1.8 : 1.3);
 
-      if (cluster.primaryEvent.category === 'earthquake') {
+      const category = String(cluster.primaryEvent?.category || '').toLowerCase();
+      const dominantDomain = String(cluster.dominantDomain || cluster.primaryEvent?.domain || '').toLowerCase();
+
+      if (category === 'earthquake') {
         // Seismic octahedron diamond
         pinGeo = new THREE.OctahedronGeometry(baseRadius, 0);
-      } else if (cluster.dominantDomain === 'weather_extreme') {
+      } else if (dominantDomain === 'weather_extreme' || category.includes('storm') || category.includes('cyclone')) {
         // Atmospheric vortex ring
         pinGeo = new THREE.TorusGeometry(baseRadius, 0.35, 8, 16);
       } else {
@@ -491,6 +501,8 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
     const lat = selectedEvent.latitude;
     const lon = selectedEvent.longitude;
+
+    if (isNaN(lat) || isNaN(lon)) return;
 
     const phi = (lat * Math.PI) / 180;
     const theta = (-lon * Math.PI) / 180;
@@ -613,22 +625,24 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
                 hoveredCluster.highestSeverity === 'critical' ? 'bg-signal-red/20 text-signal-red' :
                 hoveredCluster.highestSeverity === 'high' ? 'bg-signal-amber/20 text-signal-amber' : 'bg-signal-cyan/20 text-signal-cyan'
               }`}>
-                {hoveredCluster.highestSeverity}
+                {hoveredCluster.highestSeverity || 'INFO'}
               </span>
               <span className="text-[10px] text-content-muted">
-                {hoveredCluster.isCluster ? `${hoveredCluster.clusterCount} Events Clustered` : hoveredCluster.primaryEvent.category?.toUpperCase()}
+                {hoveredCluster.isCluster 
+                  ? `${hoveredCluster.clusterCount} Events Clustered` 
+                  : (hoveredCluster.primaryEvent?.category || hoveredCluster.primaryEvent?.domain || 'INCIDENT').toUpperCase()}
               </span>
             </div>
             <div className="font-semibold text-content-primary line-clamp-2">
-              {hoveredCluster.primaryEvent.title}
+              {hoveredCluster.primaryEvent?.title || 'Unknown Incident'}
             </div>
             <div className="flex items-center justify-between text-[10px] text-content-muted border-t border-surface-border/50 pt-1 mt-1">
               <span className="flex items-center space-x-1 truncate max-w-[120px]">
                 <MapPin className="w-3 h-3 text-signal-cyan flex-shrink-0" />
-                <span className="truncate">{hoveredCluster.primaryEvent.region || 'Coordinates'}</span>
+                <span className="truncate">{hoveredCluster.primaryEvent?.region || 'Coordinates'}</span>
               </span>
               <span className="font-bold text-content-primary">
-                Risk: {hoveredCluster.primaryEvent.calculated_risk_score}
+                Risk: {hoveredCluster.primaryEvent?.calculated_risk_score ?? 'N/A'}
               </span>
             </div>
           </div>

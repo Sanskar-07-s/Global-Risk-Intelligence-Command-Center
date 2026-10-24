@@ -22,13 +22,14 @@ export const ThreatIntelligence: React.FC<ThreatIntelligenceProps> = ({
   const [filterType, setFilterType] = useState<'all' | 'cyber' | 'geopolitical'>('all');
   const [search, setSearch] = useState('');
 
-  const threatEvents = events.filter(ev => {
+  const threatEvents = (events || []).filter(ev => {
+    if (!ev || typeof ev !== 'object') return false;
     if (filterType === 'cyber' && ev.domain !== 'cybersecurity') return false;
     if (filterType === 'geopolitical' && ev.domain !== 'geopolitical') return false;
     if (filterType === 'all' && !['cybersecurity', 'geopolitical'].includes(ev.domain)) return false;
     if (search) {
       const q = search.toLowerCase();
-      return ev.title.toLowerCase().includes(q) || ev.description?.toLowerCase().includes(q);
+      return (ev.title || '').toLowerCase().includes(q) || (ev.description || '').toLowerCase().includes(q);
     }
     return true;
   });
@@ -103,7 +104,7 @@ export const ThreatIntelligence: React.FC<ThreatIntelligenceProps> = ({
                   {threat.severity}
                 </span>
                 <span className="text-content-muted uppercase">
-                  {threat.source.toUpperCase()} // {threat.category || threat.domain}
+                  {threat.source?.toUpperCase() || 'TELEMETRY'} // {threat.category || threat.domain || 'THREAT'}
                 </span>
                 <span className="text-content-muted">•</span>
                 <span className="text-content-secondary">

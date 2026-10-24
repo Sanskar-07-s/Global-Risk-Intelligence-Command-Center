@@ -78,6 +78,12 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     throw new Error('Mixed content prevention: Cannot connect to localhost backend from HTTPS deployment.');
   }
 
+  // If in standalone production (HTTPS) and API_BASE is empty,
+  // do not make requests to relative /api/* paths because Firebase Hosting rewrites them to index.html!
+  if (isHttps && !API_BASE) {
+    throw new Error('Standalone Production Mode: Cloud Run backend not attached to origin.');
+  }
+
   const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
   const res = await fetchWithTimeout(fullUrl, {
     headers: {
@@ -91,6 +97,12 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     const errorText = await res.text();
     throw new Error(`API error ${res.status}: ${errorText || res.statusText}`);
   }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Invalid response content-type: ${contentType} (expected application/json)`);
+  }
+
   return res.json();
 }
 
@@ -210,16 +222,16 @@ export const api = {
     } catch {
       // Synthesize spatial & category correlations from cached events
       const links: CorrelationLink[] = [];
-      const evs = cachedEvents.slice(0, 25);
+      const evs = (cachedEvents || []).filter(Boolean).slice(0, 25);
       for (let i = 0; i < evs.length; i++) {
         for (let j = i + 1; j < evs.length; j++) {
           const a = evs[i];
           const b = evs[j];
-          if (a.domain === b.domain) {
+          if (a && b && a.domain && b.domain && a.domain === b.domain) {
             links.push({
               source_id: a.id,
               target_id: b.id,
-              relationship: a.category === b.category ? 'domain_co_occurrence' : 'shared_risk_sector',
+              relationship: (a.category && b.category && a.category === b.category) ? 'domain_co_occurrence' : 'shared_risk_sector',
               nature: 'inferred',
               confidence: 0.82,
               description: `Shared ${a.domain.replace('_', ' ')} incident envelope`

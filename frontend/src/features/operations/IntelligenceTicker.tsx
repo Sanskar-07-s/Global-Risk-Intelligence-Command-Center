@@ -29,15 +29,21 @@ export const IntelligenceTicker: React.FC<IntelligenceTickerProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [filterDomain, setFilterDomain] = useState<'all' | 'cyber' | 'seismic' | 'hazards'>('all');
 
-  const filtered = events.filter(ev => {
+  const filtered = (events || []).filter(ev => {
+    if (!ev || typeof ev !== 'object') return false;
+    const dom = String(ev.domain || '').toLowerCase();
+    const cat = String(ev.category || '').toLowerCase();
+    const src = String(ev.source || '').toLowerCase();
+    const id = String(ev.id || '').toLowerCase();
+
     if (filterDomain === 'cyber') {
-      return ev.domain === 'cybersecurity' || ev.source === 'cisa_kev' || ev.id.startsWith('cisa:');
+      return dom === 'cybersecurity' || src === 'cisa_kev' || id.startsWith('cisa:');
     }
     if (filterDomain === 'seismic') {
-      return ev.category === 'earthquake' || ev.source === 'usgs';
+      return cat === 'earthquake' || src === 'usgs';
     }
     if (filterDomain === 'hazards') {
-      return ev.domain === 'natural_hazard' || ev.domain === 'weather_extreme';
+      return dom === 'natural_hazard' || dom === 'weather_extreme';
     }
     return true;
   });
@@ -50,12 +56,25 @@ export const IntelligenceTicker: React.FC<IntelligenceTickerProps> = ({
   };
 
   const getEventBadge = (ev: NormalizedEvent) => {
-    const isCyber = ev.domain === 'cybersecurity' || ev.source === 'cisa_kev' || ev.id.startsWith('cisa:');
-    const isQuake = ev.category === 'earthquake' || ev.source === 'usgs';
-    const isHazard = ev.domain === 'natural_hazard' || ev.domain === 'weather_extreme';
+    if (!ev) {
+      return {
+        icon: <Radio className="w-3 h-3 text-content-secondary flex-shrink-0" />,
+        label: 'SIGNAL',
+        color: 'text-content-secondary bg-surface-subtle border-surface-border'
+      };
+    }
+    const dom = String(ev.domain || '').toLowerCase();
+    const cat = String(ev.category || '').toLowerCase();
+    const src = String(ev.source || '').toLowerCase();
+    const id = String(ev.id || '').toLowerCase();
+
+    const isCyber = dom === 'cybersecurity' || src === 'cisa_kev' || id.startsWith('cisa:');
+    const isQuake = cat === 'earthquake' || src === 'usgs';
+    const isHazard = dom === 'natural_hazard' || dom === 'weather_extreme';
 
     if (isCyber) {
-      const cveMatch = ev.title.match(/CVE-\d{4}-\d+/i) || ev.id.match(/CVE-\d{4}-\d+/i);
+      const title = ev.title || '';
+      const cveMatch = title.match(/CVE-\d{4}-\d+/i) || id.match(/CVE-\d{4}-\d+/i);
       const cveLabel = cveMatch ? cveMatch[0] : 'CVE';
       return {
         icon: <ShieldAlert className="w-3 h-3 text-signal-amber flex-shrink-0" />,
@@ -65,7 +84,8 @@ export const IntelligenceTicker: React.FC<IntelligenceTickerProps> = ({
     }
 
     if (isQuake) {
-      const magMatch = ev.title.match(/M\d+\.\d+/i);
+      const title = ev.title || '';
+      const magMatch = title.match(/M\d+\.\d+/i);
       return {
         icon: <Activity className="w-3 h-3 text-signal-cyan flex-shrink-0" />,
         label: magMatch ? magMatch[0] : 'QUAKE',
@@ -76,7 +96,7 @@ export const IntelligenceTicker: React.FC<IntelligenceTickerProps> = ({
     if (isHazard) {
       return {
         icon: <Flame className="w-3 h-3 text-signal-red flex-shrink-0" />,
-        label: ev.category ? ev.category.toUpperCase().slice(0, 8) : 'HAZARD',
+        label: ev.category ? String(ev.category).toUpperCase().slice(0, 8) : 'HAZARD',
         color: 'text-signal-red bg-signal-red/15 border-signal-red/30'
       };
     }

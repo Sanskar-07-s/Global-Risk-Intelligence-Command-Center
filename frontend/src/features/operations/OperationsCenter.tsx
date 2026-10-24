@@ -3,6 +3,7 @@ import { NormalizedEvent } from '../../types';
 import { GlobeScene } from '../../scenes/GlobeScene';
 import { IntelligenceTicker } from './IntelligenceTicker';
 import { EventDetailPanel } from './EventDetailPanel';
+import { ErrorBoundary } from '../../components/common/ErrorBoundary';
 import { Filter } from 'lucide-react';
 
 interface OperationsCenterProps {
@@ -15,7 +16,7 @@ interface OperationsCenterProps {
 }
 
 export const OperationsCenter: React.FC<OperationsCenterProps> = ({
-  events,
+  events = [],
   selectedEvent,
   onSelectEvent,
   onPinEventToCase,
@@ -25,8 +26,9 @@ export const OperationsCenter: React.FC<OperationsCenterProps> = ({
   const [selectedDomain, setSelectedDomain] = useState<string>('all');
   const [showFilters, setShowFilters] = useState<boolean>(false);
 
-  // Filter events by domain if requested
-  const filteredEvents = events.filter(ev => {
+  // Filter events by domain if requested safely
+  const filteredEvents = (events || []).filter(ev => {
+    if (!ev || typeof ev !== 'object') return false;
     if (selectedDomain !== 'all' && ev.domain !== selectedDomain) return false;
     return true;
   });
@@ -42,14 +44,16 @@ export const OperationsCenter: React.FC<OperationsCenterProps> = ({
 
   return (
     <div className="relative w-full h-full overflow-hidden select-none bg-space">
-      {/* 1. Fullscreen Primary 3D Earth Scene */}
+      {/* 1. Fullscreen Primary 3D Earth Scene (Guarded by ErrorBoundary) */}
       <div className="absolute inset-0">
-        <GlobeScene
-          events={filteredEvents}
-          selectedEvent={selectedEvent}
-          onSelectEvent={(ev) => onSelectEvent(ev)}
-          onResetView={() => onSelectEvent(null)}
-        />
+        <ErrorBoundary fallbackTitle="Planetary Earth Subsystem Anomaly">
+          <GlobeScene
+            events={filteredEvents}
+            selectedEvent={selectedEvent}
+            onSelectEvent={(ev) => onSelectEvent(ev)}
+            onResetView={() => onSelectEvent(null)}
+          />
+        </ErrorBoundary>
       </div>
 
       {/* 2. Top-Right Domain Filter Pills (Restrained) */}

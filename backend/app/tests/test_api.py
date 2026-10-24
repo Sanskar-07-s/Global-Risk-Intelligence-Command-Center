@@ -59,3 +59,31 @@ def test_case_management():
     assert response.status_code == 200
     cases = response.json()
     assert isinstance(cases, list)
+
+def test_cors_preflight_and_headers():
+    # Test CORS preflight OPTIONS request from Firebase hosting origin
+    headers = {
+        "Origin": "https://g-r-i-c-c.web.app",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "content-type"
+    }
+    response = client.options("/api/health/", headers=headers)
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://g-r-i-c-c.web.app"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+def test_events_endpoint_with_null_and_missing_categories():
+    response = client.get("/api/events/?limit=50")
+    assert response.status_code == 200
+    events = response.json()
+    assert isinstance(events, list)
+    for ev in events:
+        assert "id" in ev
+        assert "title" in ev
+        assert "domain" in ev
+        # Coordinates must be valid float or None (not undefined)
+        if ev.get("latitude") is not None:
+            assert isinstance(ev["latitude"], (int, float))
+        if ev.get("longitude") is not None:
+            assert isinstance(ev["longitude"], (int, float))
+

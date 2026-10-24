@@ -43,20 +43,22 @@ export const EventDetailPanel: React.FC<EventDetailPanelProps> = ({
   const [showRawPayload, setShowRawPayload] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
 
-  const isCyber = event.domain === 'cybersecurity' || event.source === 'cisa_kev' || event.id.startsWith('cisa:');
-  const isQuake = event.category === 'earthquake' || event.source === 'usgs';
+  const isCyber = event?.domain === 'cybersecurity' || event?.source === 'cisa_kev' || (event?.id && event.id.startsWith('cisa:'));
+  const isQuake = (event?.category || '').toLowerCase() === 'earthquake' || event?.source === 'usgs';
 
   // Extract CVE identifier if available
-  const cveMatch = event.title.match(/CVE-\d{4}-\d+/i) || event.source_id?.match(/CVE-\d{4}-\d+/i);
-  const cveId = cveMatch ? cveMatch[0] : (isCyber && event.source_id ? event.source_id : null);
+  const title = event?.title || '';
+  const sourceId = event?.source_id || '';
+  const cveMatch = title.match(/CVE-\d{4}-\d+/i) || sourceId.match(/CVE-\d{4}-\d+/i);
+  const cveId = cveMatch ? cveMatch[0] : (isCyber && sourceId ? sourceId : null);
 
   // Vendor & Product
-  const vendor = event.raw_payload?.vendor || event.score_breakdown?.vendor;
-  const product = event.raw_payload?.product || event.score_breakdown?.product;
-  const requiredAction = event.raw_payload?.action;
+  const vendor = event?.raw_payload?.vendor || event?.score_breakdown?.vendor;
+  const product = event?.raw_payload?.product || event?.score_breakdown?.product;
+  const requiredAction = event?.raw_payload?.action;
 
   // Advisory link fallback
-  const advisoryUrl = event.source_url || (cveId ? `https://nvd.nist.gov/vuln/detail/${cveId}` : null);
+  const advisoryUrl = event?.source_url || (cveId ? `https://nvd.nist.gov/vuln/detail/${cveId}` : null);
 
   const handleCopyId = () => {
     const textToCopy = cveId || event.id;
